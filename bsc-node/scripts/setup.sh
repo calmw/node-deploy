@@ -100,10 +100,12 @@ EOF
 
   # 把 repair 前已有的 enode 注入回 config（template 不注入）
   if [[ -n "${OLD_ENODES}" ]] && command -v python3 >/dev/null 2>&1; then
-    printf '%s\n' "${OLD_ENODES}" | python3 - "${CONFIG_DIR}/config.toml" <<'PYEOF'
+    OLD_ENODE_FILE="$(mktemp)"
+    printf '%s\n' "${OLD_ENODES}" > "${OLD_ENODE_FILE}"
+    python3 - "${CONFIG_DIR}/config.toml" "${OLD_ENODE_FILE}" <<'PYEOF'
 import re, sys
-cfg = sys.argv[1]
-enodes = [l.strip() for l in sys.stdin if l.strip().startswith('enode://')]
+cfg, enode_file = sys.argv[1], sys.argv[2]
+enodes = [l.strip() for l in open(enode_file) if l.strip().startswith('enode://')]
 if enodes:
     s = open(cfg).read()
     arr = "StaticNodes = [\n" + ''.join('  "%s",\n' % e for e in enodes) + "]"
@@ -111,6 +113,7 @@ if enodes:
     open(cfg, 'w').write(s)
     print("[setup] 已保留 %d 个已有 StaticNodes" % len(enodes))
 PYEOF
+    rm -f "${OLD_ENODE_FILE}"
   fi
 
   if grep -qE 'ListenAddr = ":30311"' "${CONFIG_DIR}/config.toml"; then

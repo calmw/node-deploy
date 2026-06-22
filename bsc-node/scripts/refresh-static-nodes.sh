@@ -70,10 +70,15 @@ log "合并后共 ${COUNT} 个唯一 enode"
 
 # 3) 备份 + 写入 config.toml
 cp "$CONFIG" "${CONFIG}.bak.$(date +%s)"
-printf '%s\n' "$ALL" | python3 - "$CONFIG" <<'PYEOF'
+ENODE_LIST="${TMP}.enodes"
+printf '%s\n' "$ALL" > "$ENODE_LIST"
+python3 - "$CONFIG" "$ENODE_LIST" <<'PYEOF'
 import re, sys
-cfg = sys.argv[1]
-enodes = [l.strip() for l in sys.stdin if l.strip().startswith('enode://')]
+cfg, enode_file = sys.argv[1], sys.argv[2]
+enodes = [l.strip() for l in open(enode_file) if l.strip().startswith('enode://')]
+if not enodes:
+    print("[refresh] 错误: enode 列表为空，未写入 config", file=sys.stderr)
+    sys.exit(1)
 s = open(cfg).read()
 arr = "StaticNodes = [\n" + ''.join('  "%s",\n' % e for e in enodes) + "]"
 if re.search(r'StaticNodes\s*=\s*\[[^\]]*\]', s, flags=re.DOTALL):
@@ -88,6 +93,7 @@ if not re.search(r'(?m)^\s*DialRatio\s*=', s):
 open(cfg, 'w').write(s)
 print("[refresh] 已写入 %d 个 StaticNodes + DialRatio=1" % len(enodes))
 PYEOF
+rm -f "$ENODE_LIST"
 
 # 4) 验证
 log "当前 [Node.P2P] 配置:"
