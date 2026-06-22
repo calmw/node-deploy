@@ -1,0 +1,54 @@
+services:
+  execution:
+    image: ${BASE_NODE_IMAGE:-ghcr.io/base/node-reth}:${BASE_NODE_VERSION:-v1.1.1}
+    container_name: base-execution
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${HTTP_PORT:-8545}:8545"
+      - "127.0.0.1:${WS_PORT:-8546}:8546"
+      - "127.0.0.1:${EXEC_METRICS_PORT:-7301}:6060"
+      - "${P2P_EXEC_PORT:-30303}:30303"
+      - "${P2P_EXEC_PORT:-30303}:30303/udp"
+    command: ["bash", "./execution-entrypoint"]
+    volumes:
+      - base_reth_data:/data
+    env_file:
+      - config/network.env
+    networks:
+      - base-network
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+  consensus:
+    image: ${BASE_NODE_IMAGE:-ghcr.io/base/node-reth}:${BASE_NODE_VERSION:-v1.1.1}
+    container_name: base-consensus
+    restart: unless-stopped
+    depends_on:
+      - execution
+    ports:
+      - "127.0.0.1:${CONSENSUS_RPC_PORT:-7545}:8545"
+      - "${P2P_CONSENSUS_PORT:-9222}:9222"
+      - "${P2P_CONSENSUS_PORT:-9222}:9222/udp"
+      - "127.0.0.1:${CONSENSUS_METRICS_PORT:-7300}:7300"
+      - "127.0.0.1:${CONSENSUS_PPROF_PORT:-6060}:6060"
+    command: ["bash", "./consensus-entrypoint"]
+    env_file:
+      - config/network.env
+    networks:
+      - base-network
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+volumes:
+  base_reth_data:
+    name: base-node-data
+
+networks:
+  base-network:
+    name: base-node-network
