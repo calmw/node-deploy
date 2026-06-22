@@ -1,0 +1,39 @@
+# Bitcoin Core 主网配置
+# 复制为 bitcoin.conf 后按需修改：
+#   cp config/bitcoin.conf.example config/bitcoin.conf
+
+# ---------- 网络 ----------
+# 主网（默认，可省略）
+chain=main
+
+# 监听 P2P 连接
+listen=1
+listenonion=0
+
+# ---------- RPC ----------
+server=1
+rpcbind=0.0.0.0:8332
+rpcallowip=127.0.0.0/8
+rpcallowip=172.16.0.0/12
+rpcallowip=192.168.0.0/16
+
+# 建议设置强密码；也可删除以下两行改用 cookie 认证（见 README）
+rpcuser=btc_rpc_user
+rpcpassword=CHANGE_ME_TO_A_STRONG_PASSWORD
+
+# ---------- 同步与存储 ----------
+# 裁剪模式：保留最近约 2000 MB 区块数据（单位 MB，最小 550）
+# 与 txindex 互斥；启用后无法 serve 完整历史区块
+prune=2000
+
+# 全节点（保留完整区块链，约 600GB+）：注释上一行 prune 即可
+# 建立完整交易索引（可选，便于 block explorer / 高级查询，额外占用约 100GB+）
+# txindex=1
+
+# ---------- 性能（按机器配置调整） ----------
+dbcache=450
+maxconnections=40
+maxuploadtarget=5000
+
+# ---------- 日志 ----------
+printtoconsole=1

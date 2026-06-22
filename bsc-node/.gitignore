@@ -1,0 +1,8 @@
+.env
+config/
+!config/.gitkeep
+!config/config.toml.template
+data/
+!data/.gitkeep
+*.log
+data/snapshot-download.pid

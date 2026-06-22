@@ -1,0 +1,38 @@
+services:
+  bitcoind:
+    image: bitcoin/bitcoin:${BITCOIN_VERSION:-31.0}
+    container_name: bitcoind
+    restart: unless-stopped
+    ports:
+      # P2P：供其他节点连接；若仅做轻量验证可注释此行
+      - "${P2P_PORT:-8333}:8333"
+      # RPC：仅绑定本机，避免暴露到公网
+      - "127.0.0.1:${RPC_PORT:-8332}:8332"
+    volumes:
+      - bitcoin_data:/home/bitcoin/.bitcoin
+      # 勿加 :ro，否则 entrypoint chown 失败；勿用 -conf 指向其他路径，否则 v31 会因 datadir 内残留 bitcoin.conf 报错
+      - ./config/bitcoin.conf:/home/bitcoin/.bitcoin/bitcoin.conf
+    command: -printtoconsole
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bitcoin-cli",
+          "-datadir=/home/bitcoin/.bitcoin",
+          "-chain=main",
+          "-rpcwait",
+          "getblockchaininfo",
+        ]
+      interval: 60s
+      timeout: 15s
+      retries: 5
+      start_period: 180s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+volumes:
+  bitcoin_data:
+    name: btc-node-data
