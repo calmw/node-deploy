@@ -1,9 +1,11 @@
-# Base 主网 / Sepolia 节点（Docker Compose）
+# Base 主网 / Sepolia 节点（Docker Compose · Pruned）
 
-使用 [Base 官方 node-reth 镜像](https://github.com/base/node) 运行 Base L2 全节点，包含：
+使用 [Base 官方 node-reth 镜像](https://github.com/base/node) 运行 Base L2 节点，包含：
 
 - **execution**（`base-reth-node`）：执行层，提供 JSON-RPC / WebSocket
 - **consensus**（`base-consensus`）：共识层，连接 L1 以太坊并驱动执行层同步
+
+**默认模式：Pruned（裁剪）**，保留约最近 **1_339_200 块（≈31 天）** 的状态与索引，显著节省磁盘；与官方 pruned 快照一致。
 
 ## 架构概览
 
@@ -24,15 +26,14 @@
 
 ## 前置要求
 
-| 项目 | 建议 |
-|------|------|
-| Docker | Docker Engine 24+ 与 Docker Compose v2 |
-| 内存 | **≥ 32GB**（官方推荐 64GB） |
-| 磁盘 | NVMe SSD；全量同步需 **数百 GB**（可用官方快照加速） |
-| L1 节点 | **必填**：Ethereum 主网（或 Sepolia）全节点 **RPC + Beacon** |
-| 带宽 | 稳定网络；初始同步流量较大 |
+| 项目 | Pruned（默认） | Archive（可选） |
+|------|----------------|-----------------|
+| Docker | Engine 24+ / Compose v2 | 同左 |
+| 内存 | **≥ 32GB**（推荐 64GB） | 同左 |
+| 磁盘 | **≥ 200GB**（建议 300GB+；可用 pruned 快照） | **数百 GB～1TB+** |
+| L1 节点 | 主网 / Sepolia **RPC + Beacon**（必填） | 同左 |
 
-> Base 是 OP Stack L2，**必须**配置可用的 L1 以太坊节点，否则 consensus 无法工作。
+> Base 是 OP Stack L2，**必须**配置可用的 L1 以太坊节点。
 
 ## 快速开始
 
@@ -44,38 +45,44 @@ chmod +x scripts/*.sh
 ./scripts/setup.sh
 ```
 
-脚本会创建 `.env` 与 `config/network.env`。
+脚本会创建 `.env` 与 `config/network.env`（**已含 Pruned 参数**）。
 
 ### 2. 配置 L1 端点
 
-编辑 `config/network.env`，填入你的 L1 节点地址：
+编辑 `config/network.env`：
 
 ```ini
 BASE_NODE_L1_ETH_RPC=https://your-eth-mainnet-rpc
 BASE_NODE_L1_BEACON=https://your-eth-beacon-api
 ```
 
-可使用自建以太坊全节点，或 Alchemy / Infura 等（需同时提供 execution RPC 与 consensus/beacon API）。
-
 ### 3. 启动节点
 
 ```bash
 ./scripts/start.sh
-```
-
-加 `-f` 可启动后直接跟踪日志：
-
-```bash
+# 或
 ./scripts/start.sh -f
 ```
 
-### 4. 检查同步状态
+### 4. 检查同步
 
 ```bash
 ./scripts/status.sh
-./scripts/base-rpc.sh eth_blockNumber
 ./scripts/base-rpc.sh eth_syncing
 ```
+
+## Pruned 能力边界
+
+| 能力 | Pruned（默认，~31 天） | Archive |
+|------|------------------------|---------|
+| 最新 RPC / 发交易 | ✅ | ✅ |
+| 近期交易 / logs | ✅ 窗口内 | ✅ 全链 |
+| `debug_trace` / 内部交易 | ✅ 窗口内 | ✅ 全链 |
+| 磁盘占用 | 较小 | 很大 |
+
+配合 **实时 trace 落库** 索引 internal tx 时，Pruned 通常足够；老于 ~31 天的数据需 Archive 或第三方 RPC。
+
+> **节点类型在首次同步后不可更改**（Pruned ↔ Archive 需清数据重建）。见 [reth pruning FAQ](https://reth.rs/run/faq/pruning/)。
 
 ## 目录结构
 
@@ -84,125 +91,100 @@ base-node/
 ├── docker-compose.yml
 ├── .env.example
 ├── config/
-│   ├── env.mainnet.example    # 主网配置模板
-│   ├── env.sepolia.example    # Sepolia 配置模板
-│   └── network.env            # 实际配置（setup 生成，勿提交）
+│   ├── env.mainnet.example          # 主网 Pruned（默认模板）
+│   ├── env.sepolia.example          # Sepolia Pruned
+│   ├── env.mainnet.archive.example  # 主网 Archive（可选）
+│   ├── env.sepolia.archive.example
+│   └── network.env                  # 实际配置（setup 生成）
 ├── scripts/
-│   ├── setup.sh               # 一键初始化
-│   ├── start.sh               # 启动节点
-│   ├── stop.sh                # 停止节点
-│   ├── status.sh              # 容器与同步状态
-│   └── base-rpc.sh            # JSON-RPC 封装
+│   ├── setup.sh
+│   ├── start.sh
+│   ├── stop.sh
+│   ├── status.sh
+│   ├── reset-data.sh                # 清卷重建（切换模式时用）
+│   └── base-rpc.sh
 └── README.md
 ```
 
-区块链数据保存在 Docker 命名卷 `base-node-data` 中。
-
 ## 配置说明
 
-### 环境变量（`.env`）
+### Pruned 参数（`config/network.env`）
 
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `BASE_NODE_IMAGE` | `ghcr.io/base/node-reth` | 官方镜像 |
-| `BASE_NODE_VERSION` | `v1.1.1` | 镜像标签，见 [releases](https://github.com/base/node/releases) |
-| `NETWORK` | `mainnet` | `mainnet` 或 `sepolia`（仅 setup 时使用） |
-| `HTTP_PORT` | `8545` | 执行层 JSON-RPC（绑定 127.0.0.1） |
-| `WS_PORT` | `8546` | 执行层 WebSocket |
-| `P2P_EXEC_PORT` | `30303` | 执行层 P2P |
-| `P2P_CONSENSUS_PORT` | `9222` | 共识层 P2P |
+默认已启用：
 
-### 切换测试网
+```ini
+RETH_PRUNING_ARGS=--prune.senderrecovery.distance=1339200 --prune.transactionlookup.distance=1339200 --prune.receipts.distance=1339200 --prune.accounthistory.distance=1339200 --prune.storagehistory.distance=1339200 --prune.bodies.distance=1339200
+```
 
-1. 修改 `.env` 中 `NETWORK=sepolia`
-2. 删除 `config/network.env` 后重新 `./scripts/setup.sh`
-3. 填写 Sepolia L1 RPC / Beacon
-4. `./scripts/start.sh`
+`1339200` 与 [官方 pruned 快照](https://docs.base.org/base-chain/node-operators/snapshots) 一致（Base ~2 秒/块 ≈ **31 天**）。
 
-### 可选功能
+### 切换为 Archive 全节点
 
-在 `config/network.env` 中取消注释即可：
+```bash
+./scripts/stop.sh
+bash scripts/reset-data.sh          # 或 docker compose down -v
+cp config/env.mainnet.archive.example config/network.env
+# 编辑 L1 RPC / Beacon
+./scripts/start.sh
+```
+
+Archive 配置 **不要** 设置 `RETH_PRUNING_ARGS`。
+
+### 从 Archive 改为 Pruned
+
+若曾以 Archive 跑过，必须清数据后重来：
+
+```bash
+./scripts/stop.sh
+bash scripts/reset-data.sh
+cp config/env.mainnet.example config/network.env   # 或手动恢复 RETH_PRUNING_ARGS
+# 填写 L1 端点
+./scripts/start.sh
+```
+
+### 其他可选配置
 
 - **Flashblocks**：`RETH_FB_WEBSOCKET_URL=wss://mainnet.flashblocks.base.org/ws`
-- **裁剪节点**：`RETH_PRUNING_ARGS=...`（首次同步前设置，之后不可更改节点类型）
-- **固定 P2P 公网 IP**：`BASE_NODE_P2P_ADVERTISE_IP=你的公网IP`
+- **固定 P2P IP**：`BASE_NODE_P2P_ADVERTISE_IP=...`
+
+## 快照加速（推荐 Pruned）
+
+从头 sync 较慢，建议导入 **pruned 快照**（勿用 archive 快照配 pruned 参数）：
+
+1. `./scripts/stop.sh`
+2. 从 [Base Snapshots 文档](https://docs.base.org/base-chain/node-operators/snapshots) 下载 **pruned** 快照
+3. 解压到卷 `base-node-data` 的 `/data` 目录
+4. `./scripts/start.sh`
 
 ## 常用命令
 
 ```bash
-# 启动 / 停止
 ./scripts/start.sh
 ./scripts/stop.sh
-
-# 日志
 docker compose logs -f execution
-docker compose logs -f consensus
-
-# RPC 示例
-./scripts/base-rpc.sh eth_chainId
-./scripts/base-rpc.sh eth_getBlockByNumber '["latest", false]'
-
-# 停止并删除容器（数据卷保留）
-docker compose down
-
-# 停止并删除数据卷（⚠️ 需重新同步）
-docker compose down -v
+docker compose down -v              # 停止并删数据卷
+bash scripts/reset-data.sh          # 交互式清卷
 ```
-
-## 快照加速
-
-全量从头同步耗时很长。可使用官方快照 bootstrap，详见 [Base 文档 - Snapshots](https://docs.base.org/base-chain/node-operators/snapshots)。
-
-大致步骤：
-
-1. 停止节点：`./scripts/stop.sh`
-2. 按文档下载并解压快照到卷 `base-node-data` 的 `/data` 目录
-3. 重新启动：`./scripts/start.sh`
 
 ## 故障排查
 
-### consensus 无法启动 / 获取公网 IP 失败
+### 已有 Archive 数据，改成 Pruned 后启动异常
 
-consensus 启动时会自动探测公网 IP 用于 P2P 广播。若环境无外网或探测失败，在 `config/network.env` 中手动设置：
+Pruned 与 Archive 数据不兼容 → `bash scripts/reset-data.sh` 后重新 sync 或导入 pruned 快照。
 
-```ini
-BASE_NODE_P2P_ADVERTISE_IP=你的公网或 Tailscale IP
-```
+### consensus 无法获取公网 IP
 
-### execution 一直等待 / RPC 不可用
-
-consensus 需等待 execution 的 Engine API（8551）就绪。查看日志：
-
-```bash
-docker compose logs --tail=50 execution
-docker compose logs --tail=50 consensus
-```
+在 `config/network.env` 设置 `BASE_NODE_P2P_ADVERTISE_IP`。
 
 ### L1 连接错误
 
-确认 `BASE_NODE_L1_ETH_RPC` 与 `BASE_NODE_L1_BEACON` 可访问，且与所选网络（mainnet / sepolia）一致。
-
-### 升级节点版本
-
-1. 修改 `.env` 中 `BASE_NODE_VERSION`（参考 [base/node releases](https://github.com/base/node/releases)）
-2. 执行：
-
-```bash
-docker compose pull
-docker compose up -d
-```
-
-## 安全建议
-
-1. **RPC 仅本机访问**：`docker-compose.yml` 已将 8545/8546 绑定到 `127.0.0.1`
-2. **勿提交密钥**：`.env` 与 `config/network.env` 已在 `.gitignore` 中
-3. **L1 RPC 密钥**：若使用第三方 RPC，注意配额与 IP 白名单
+确认 `BASE_NODE_L1_ETH_RPC` / `BASE_NODE_L1_BEACON` 与 `NETWORK`（mainnet/sepolia）一致。
 
 ## 参考链接
 
 - [Base 官方节点仓库](https://github.com/base/node)
+- [Base 快照](https://docs.base.org/base-chain/node-operators/snapshots)
 - [Base 节点文档](https://docs.base.org/base-chain/node-operators/run-a-base-node)
-- [Base V1 / Azul 升级说明](https://docs.base.org/base-chain/node-operators/base-v1-upgrade)
 
 ## 许可证
 

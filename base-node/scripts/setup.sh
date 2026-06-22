@@ -28,13 +28,19 @@ esac
 
 if [[ ! -f config/network.env ]]; then
   cp "${TEMPLATE}" config/network.env
-  echo "已创建 config/network.env（${NETWORK}）"
+  echo "已创建 config/network.env（${NETWORK}，默认 Pruned ~31 天）"
   echo
   echo "⚠️  请编辑 config/network.env，填写 L1 节点地址："
   echo "    BASE_NODE_L1_ETH_RPC"
   echo "    BASE_NODE_L1_BEACON"
 else
   echo "config/network.env 已存在，跳过"
+  if ! grep -qE '^RETH_PRUNING_ARGS=' config/network.env 2>/dev/null; then
+    echo
+    echo "ℹ️  当前 network.env 未设置 RETH_PRUNING_ARGS（Archive 模式）"
+    echo "    若需 Pruned：参考 config/env.${NETWORK}.example 添加 RETH_PRUNING_ARGS"
+    echo "    切换模式需：bash scripts/reset-data.sh 后重新同步"
+  fi
 fi
 
 if grep -qE '^BASE_NODE_L1_ETH_RPC=$' config/network.env 2>/dev/null \
