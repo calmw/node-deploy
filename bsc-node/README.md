@@ -173,6 +173,78 @@ docker exec bsc-node geth attach --datadir /bsc/node \
   --exec "admin.peers.map(p=>p.network.inbound)"
 ```
 
+### BAD BLOCK + `execution aborted (timeout = 5s)`
+
+日志反复出现同一高度，例如：
+
+```text
+########## BAD BLOCK #########
+Block: 105617727 (0xcf01b4...)
+Error: execution aborted (timeout = 5s)
+Synchronisation failed, dropping peer ... err="retrieved hash chain is invalid: execution aborted (timeout = 5s)"
+```
+
+**这不是链上坏块**，而是本机在同步验证时 **5 秒内没跑完区块执行**（CPU / 内存 / 磁盘 I/O 不足，或 trace 索引器与追块争抢资源）。节点会误判为 BAD BLOCK 并不断踢 peer，高度卡住不动。
+
+**处理顺序：**
+
+**1. 追块期降低内存参数（最常见有效）**
+
+编辑 `.env`，追块完成前临时调低 `TRIES_IN_MEMORY`，并适当增大 cache：
+
+```bash
+TRIES_IN_MEMORY=4096      # 追块期；同步完成后改回 15000
+HISTORY_STATE=4096
+CACHE_MB=4096             # 原 2048 时可提高，加快导入
+```
+
+确认容器内存上限与物理内存匹配（32G 机器示例）：
+
+```bash
+MEM_LIMIT=32g
+MEMSWAP_LIMIT=48g
+```
+
+重启：
+
+```bash
+docker compose down && docker compose up -d
+docker compose logs -f bsc
+```
+
+**2. 追块期间暂停 trace 索引器 / 大量 RPC**
+
+若有 internal tx 索引器或 heavy `debug_*` 调用，追块完成前暂停，避免与 geth 争抢 CPU / 内存。
+
+**3. 检查磁盘与负载**
+
+```bash
+# 磁盘空间与 I/O（建议 NVMe SSD，追块期 iowait 不宜长期 >30%）
+df -h data/node
+docker stats bsc-node --no-stream
+docker exec bsc-node geth attach --datadir /bsc/node --exec "eth.syncing"
+docker exec bsc-node geth attach --datadir /bsc/node --exec "eth.blockNumber"
+```
+
+**4. 同步完成后恢复 trace 窗口**
+
+```bash
+# .env 改回
+TRIES_IN_MEMORY=15000
+HISTORY_STATE=15000
+docker compose restart
+```
+
+**5. 仍卡在同一高度 → 快照/本地数据可能损坏**
+
+```bash
+docker compose down
+bash scripts/reset-data.sh
+bash scripts/snapshot.sh start    # 重新下载 48Club 快照
+# 下载完成后
+docker compose up -d
+```
+
 ### 快照 404
 
 脚本自动从 48Club 获取最新 URL，重新下载即可：

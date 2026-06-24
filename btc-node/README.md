@@ -80,6 +80,8 @@ docker compose logs -f bitcoind
 ./scripts/btc-cli.sh getblockchaininfo | grep -E '"blocks"|"headers"|"verificationprogress"|"initialblockdownload"'
 ```
 
+更多 RPC 调用方式（curl、常用 API、远程访问）见下文 [RPC 调用](#rpc-调用) 一节。
+
 ## 目录结构
 
 ```text
@@ -151,7 +153,6 @@ docker compose restart bitcoind
 
 # 状态与同步进度
 ./scripts/status.sh
-```
 
 # 停止并移除容器（数据卷保留）
 docker compose down
@@ -160,39 +161,171 @@ docker compose down
 docker compose down -v
 ```
 
-### RPC 示例
+## RPC 调用
+
+Bitcoin Core RPC 在容器内监听 `8332`，通过 Docker 映射到宿主机 **`127.0.0.1:${RPC_PORT:-8332}`**（仅本机可访问，见 `docker-compose.yml`）。
+
+### 前置条件
+
+- 节点已启动且健康：`docker compose ps` 显示 `healthy`
+- 已执行 `./scripts/setup.sh` 生成 `config/bitcoin.conf`（含 `rpcuser` / `rpcpassword`）
+- `config/bitcoin.conf` 中 `server=1` 已启用（模板默认已开启）
+
+### 快速验证
 
 ```bash
-# 网络信息
-./scripts/btc-cli.sh getnetworkinfo
+./scripts/status.sh
+./scripts/btc-cli.sh getblockchaininfo
+```
 
-# 连接的对等节点
+正常时返回 JSON，且 `verificationprogress` 趋近 `1.0`；同步完成后 `initialblockdownload` 为 `false`。
+
+### 方式一：`btc-cli.sh`（推荐）
+
+项目封装脚本，在宿主机直接调用容器内 `bitcoin-cli`：
+
+```bash
+./scripts/btc-cli.sh <命令> [参数...]
+```
+
+示例：
+
+```bash
+# 链状态与同步进度
+./scripts/btc-cli.sh getblockchaininfo
+
+# 当前区块高度
+./scripts/btc-cli.sh getblockcount
+
+# 最新区块哈希
+./scripts/btc-cli.sh getbestblockhash
+
+# 网络与对等节点
+./scripts/btc-cli.sh getnetworkinfo
 ./scripts/btc-cli.sh getpeerinfo
 
 # 内存池
 ./scripts/btc-cli.sh getmempoolinfo
 
-# 估算同步剩余（需 jq）
+# 带参数：按高度查区块（1=含完整交易）
+./scripts/btc-cli.sh getblockhash 955119
+./scripts/btc-cli.sh getblock "<区块哈希>" 1
+
+# 需 jq 时可管道过滤
 ./scripts/btc-cli.sh getblockchaininfo | jq '{blocks, headers, verificationprogress, initialblockdownload}'
 ```
 
-也可直接进入容器：
+### 方式二：`docker compose exec`
+
+等价于进入容器执行 `bitcoin-cli`：
 
 ```bash
-docker compose exec bitcoind bitcoin-cli -chain=main getblockchaininfo
+docker compose exec bitcoind bitcoin-cli -datadir=/home/bitcoin/.bitcoin -chain=main getblockchaininfo
 ```
 
-### 从宿主机调用 RPC（curl）
+### 方式三：HTTP JSON-RPC（curl / 程序调用）
 
-若配置了 `rpcuser` / `rpcpassword`：
+Bitcoin Core 使用 **JSON-RPC 1.0**（不是 Ethereum 常见的 2.0）。请求格式：
+
+```json
+{"jsonrpc":"1.0","id":"<任意标识>","method":"<方法名>","params":[...]}
+```
+
+认证方式为 HTTP Basic Auth，用户名与密码来自 `config/bitcoin.conf` 的 `rpcuser` / `rpcpassword`。
+
+**通用模板**（在 `btc-node` 目录下执行）：
 
 ```bash
-source config/bitcoin.conf 2>/dev/null || true
-curl --user "${rpcuser}:${rpcpassword}" \
-  --data-binary '{"jsonrpc":"1.0","id":"curl","method":"getblockchaininfo","params":[]}' \
+[[ -f .env ]] && source .env
+source config/bitcoin.conf
+
+RPC_URL="http://127.0.0.1:${RPC_PORT:-8332}/"
+
+curl -s --user "${rpcuser}:${rpcpassword}" \
+  --data-binary '{"jsonrpc":"1.0","id":"1","method":"<方法名>","params":[]}' \
   -H 'content-type: text/plain;' \
-  http://127.0.0.1:8332/
+  "${RPC_URL}"
 ```
+
+**常用示例**：
+
+```bash
+[[ -f .env ]] && source .env
+source config/bitcoin.conf
+RPC="http://127.0.0.1:${RPC_PORT:-8332}/"
+
+# 链状态
+curl -s --user "${rpcuser}:${rpcpassword}" \
+  --data-binary '{"jsonrpc":"1.0","id":"1","method":"getblockchaininfo","params":[]}' \
+  -H 'content-type: text/plain;' "${RPC}"
+
+# 区块高度
+curl -s --user "${rpcuser}:${rpcpassword}" \
+  --data-binary '{"jsonrpc":"1.0","id":"1","method":"getblockcount","params":[]}' \
+  -H 'content-type: text/plain;' "${RPC}"
+
+# 最新区块哈希
+curl -s --user "${rpcuser}:${rpcpassword}" \
+  --data-binary '{"jsonrpc":"1.0","id":"1","method":"getbestblockhash","params":[]}' \
+  -H 'content-type: text/plain;' "${RPC}"
+
+# 估算手续费（conf_target=6 表示约 6 个区块内确认，economical=true）
+curl -s --user "${rpcuser}:${rpcpassword}" \
+  --data-binary '{"jsonrpc":"1.0","id":"1","method":"estimatesmartfee","params":[6,"economical"]}' \
+  -H 'content-type: text/plain;' "${RPC}"
+```
+
+**成功响应示例**：
+
+```json
+{"result":{"chain":"main","blocks":955119,"headers":955119,"verificationprogress":1,"initialblockdownload":false},"error":null,"id":"1"}
+```
+
+**失败响应示例**（认证错误）：
+
+```json
+{"result":null,"error":{"code":-28,"message":"Loading block index..."},"id":"1"}
+```
+
+- `error: null` 表示调用成功
+- `code: -28` 常见于节点尚在启动/加载索引，稍后重试即可
+- HTTP `401` 表示 `rpcuser` / `rpcpassword` 不匹配
+
+### 常用 RPC 方法
+
+| 方法 | 说明 |
+|------|------|
+| `getblockchaininfo` | 链状态、同步进度、是否裁剪 |
+| `getblockcount` | 当前区块高度 |
+| `getbestblockhash` | 最新区块哈希 |
+| `getblockhash` | 按高度查区块哈希 |
+| `getblock` | 查区块详情（第二参数 `1` 含完整交易） |
+| `getrawtransaction` | 查原始交易（裁剪节点仅支持仍在链上的交易） |
+| `getnetworkinfo` | 网络连接数、版本等 |
+| `getpeerinfo` | 对等节点详情 |
+| `getmempoolinfo` | 内存池状态 |
+| `estimatesmartfee` | 估算手续费 |
+| `sendrawtransaction` | 广播已签名原始交易 |
+
+完整 API 见 [Bitcoin Core RPC 文档](https://developer.bitcoin.org/reference/rpc/)。
+
+### 远程访问
+
+RPC 端口仅绑定 `127.0.0.1`，其他机器无法直接访问。可通过 SSH 隧道转发：
+
+```bash
+# 在本地机器执行，将远端 8332 映射到本地 8332
+ssh -L 8332:127.0.0.1:8332 user@your-server
+
+# 之后在本地调用
+curl -s --user "rpcuser:rpcpassword" \
+  --data-binary '{"jsonrpc":"1.0","id":"1","method":"getblockcount","params":[]}' \
+  -H 'content-type: text/plain;' http://127.0.0.1:8332/
+```
+
+### 裁剪节点限制
+
+当前默认启用 `prune=2000`，可正常调用 RPC 查询**近期区块与仍在链上的交易**；无法 serve 完整历史区块，也不支持 `txindex=1`。若业务需要完整历史，需改为全节点并启用 `txindex=1`（见上文配置说明）。
 
 ## 安全建议
 
