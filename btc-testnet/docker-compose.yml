@@ -1,16 +1,17 @@
 services:
   bitcoind:
     image: bitcoin/bitcoin:${BITCOIN_VERSION:-31.0}
-    container_name: bitcoind
+    container_name: bitcoind-signet
     restart: unless-stopped
+    stop_grace_period: 60s
     ports:
-      # P2P：供其他节点连接；若仅做轻量验证可注释此行
-      - "${P2P_PORT:-8333}:8333"
-      # RPC：默认仅本机；Tailscale 内网访问见 .env 的 RPC_BIND_ADDR
-      - "${RPC_BIND_ADDR:-127.0.0.1}:${RPC_PORT:-8332}:8332"
+      # P2P：连接 Signet；云安全组需放行出站，入站可选（有助于 peer 连接）
+      - "${P2P_PORT:-38333}:8333"
+      # RPC：绑定见 .env 的 RPC_BIND_ADDR；生产须配合安全组 + bitcoin.conf 的 rpcallowip
+      - "${RPC_BIND_ADDR:-127.0.0.1}:${RPC_PORT:-38332}:8332"
     volumes:
       - bitcoin_data:/home/bitcoin/.bitcoin
-      # 勿加 :ro，否则 entrypoint chown 失败；勿用 -conf 指向其他路径，否则 v31 会因 datadir 内残留 bitcoin.conf 报错
+      # 勿加 :ro；勿用 -conf 指向其他路径（Core 31+ 会因 datadir 残留配置报错）
       - ./config/bitcoin.conf:/home/bitcoin/.bitcoin/bitcoin.conf
     command: -printtoconsole
     healthcheck:
@@ -19,7 +20,7 @@ services:
           "CMD",
           "bitcoin-cli",
           "-datadir=/home/bitcoin/.bitcoin",
-          "-chain=main",
+          "-chain=signet",
           "-rpcwait",
           "getblockchaininfo",
         ]
@@ -32,7 +33,13 @@ services:
       options:
         max-size: "50m"
         max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
 
 volumes:
   bitcoin_data:
-    name: btc-node-data
+    name: btc-testnet-data

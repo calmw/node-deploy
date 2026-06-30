@@ -16,6 +16,8 @@ rpcbind=0.0.0.0:8332
 rpcallowip=127.0.0.0/8
 rpcallowip=172.16.0.0/12
 rpcallowip=192.168.0.0/16
+# Tailscale CGNAT（内网 RPC 访问时取消注释）
+# rpcallowip=100.64.0.0/10
 
 # 建议设置强密码；也可删除以下两行改用 cookie 认证（见 README）
 rpcuser=btc_rpc_user

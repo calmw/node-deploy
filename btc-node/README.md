@@ -96,7 +96,10 @@ btc-node/
 │   ├── start.sh                # 启动节点
 │   ├── stop.sh                 # 停止节点
 │   ├── status.sh               # 容器与同步状态
-│   └── btc-cli.sh              # RPC 命令封装
+│   ├── btc-cli.sh              # RPC 命令封装
+│   ├── btc-rpc-test.sh         # HTTP RPC 健康检查
+│   ├── btc-rpc-test-parse.py   # 测试断言（被 btc-rpc-test.sh 调用）
+│   └── btc-rpc-test-extract.py # 提取 RPC result 字段
 └── README.md
 ```
 
@@ -309,18 +312,83 @@ curl -s --user "${rpcuser}:${rpcpassword}" \
 
 完整 API 见 [Bitcoin Core RPC 文档](https://developer.bitcoin.org/reference/rpc/)。
 
-### 远程访问
-
-RPC 端口仅绑定 `127.0.0.1`，其他机器无法直接访问。可通过 SSH 隧道转发：
+### HTTP RPC 健康检查
 
 ```bash
-# 在本地机器执行，将远端 8332 映射到本地 8332
-ssh -L 8332:127.0.0.1:8332 user@your-server
+bash scripts/btc-rpc-test.sh --user YOUR_RPC_USER --pass 'YOUR_RPC_PASSWORD'
+# 或指定 URL
+bash scripts/btc-rpc-test.sh --url http://100.125.134.45:8332/ --user ... --pass ...
+```
 
-# 之后在本地调用
-curl -s --user "rpcuser:rpcpassword" \
+脚本会检测连通性、`getblockchaininfo`、`getpeerinfo`、`getblock`、`estimatesmartfee` 等常用接口，并输出 PASS/WARN/FAIL 汇总。
+
+### Tailscale 内网访问（推荐）
+
+默认 RPC 只监听 `127.0.0.1:8332`，Tailscale 网内其他设备无法直连。启用内网访问需改 **两处**：
+
+**1. 查家用服务器 Tailscale IP**
+
+```bash
+tailscale ip -4
+# 例如: 100.125.134.45
+```
+
+**2. 编辑 `.env`**
+
+```bash
+RPC_BIND_ADDR=100.125.134.45   # 换成上一步的 IP
+RPC_PORT=8332
+```
+
+**3. 编辑 `config/bitcoin.conf`，允许 Tailscale 网段**
+
+```ini
+rpcallowip=100.64.0.0/10
+```
+
+（保留原有 `127.0.0.0/8` 等行；`rpcbind=0.0.0.0:8332` 可保持不变。）
+
+**4. 重启并验证**
+
+```bash
+docker compose down && docker compose up -d
+sudo lsof -i :8332
+# 期望: 100.125.134.45:8332 (LISTEN)，而不只是 localhost:8332
+```
+
+**5. 在 Mac / 其他已登录 Tailscale 的设备上测试**
+
+```bash
+cd btc-node
+source config/bitcoin.conf   # 或 --user / --pass
+bash scripts/btc-rpc-test.sh --url http://100.125.134.45:8332/
+```
+
+或 curl：
+
+```bash
+curl -s --user "${rpcuser}:${rpcpassword}" \
   --data-binary '{"jsonrpc":"1.0","id":"1","method":"getblockcount","params":[]}' \
-  -H 'content-type: text/plain;' http://127.0.0.1:8332/
+  -H 'content-type: text/plain;' \
+  http://100.125.134.45:8332/
+```
+
+**安全说明**
+
+- 绑定 **Tailscale IP**（如 `100.x.x.x`），不要绑定 `0.0.0.0:8332`，避免 RPC 暴露到公网。
+- 仅同一 Tailnet 内、且已安装 Tailscale 的设备能访问。
+- 务必使用强 `rpcpassword`；可在 Tailscale Admin 用 ACL 进一步限制谁能访问该机器。
+
+### SSH 隧道（备选）
+
+若不想改 Docker 绑定，也可用 SSH 转发（无需改 `rpcallowip`）：
+
+```bash
+# 在本地 Mac 执行
+ssh -L 8332:127.0.0.1:8332 user@家用服务器公网或Tailscale地址
+
+# 之后本地访问
+curl ... http://127.0.0.1:8332/
 ```
 
 ### 裁剪节点限制
@@ -329,7 +397,7 @@ curl -s --user "rpcuser:rpcpassword" \
 
 ## 安全建议
 
-1. **RPC 仅本机访问**：`docker-compose.yml` 已将 8332 绑定到 `127.0.0.1`，勿改为 `0.0.0.0`。
+1. **RPC 勿暴露公网**：默认绑定 `127.0.0.1`；Tailscale 内网访问请绑定 **Tailscale IP** + `rpcallowip=100.64.0.0/10`，不要绑 `0.0.0.0`。
 2. **强 RPC 密码**：使用 `setup.sh` 自动生成，或自行设置复杂密码。
 3. **勿提交密钥**：`config/bitcoin.conf` 与 `.env` 已在 `.gitignore` 中。
 4. **防火墙**：若不需要对外提供 P2P，可在 `docker-compose.yml` 中注释 P2P 端口映射；节点仍可通过出站连接同步。

@@ -1,0 +1,43 @@
+# Bitcoin Signet 测试网（团队开发用）
+# cp config/bitcoin.conf.example config/bitcoin.conf
+
+# ---------- 网络 ----------
+chain=signet
+
+listen=1
+listenonion=0
+
+# ---------- RPC（团队共用） ----------
+server=1
+rpcbind=0.0.0.0:8332
+
+# Docker 桥接 + 本机
+rpcallowip=127.0.0.0/8
+rpcallowip=172.16.0.0/12
+rpcallowip=192.168.0.0/16
+
+# 云 VPC 内网（阿里云/腾讯云/AWS 等常见网段）
+rpcallowip=10.0.0.0/8
+
+# 公司 VPN / 办公网：按实际网段取消注释（须与云安全组放行范围一致）
+# rpcallowip=10.100.0.0/16
+
+rpcuser=btc_signet_rpc
+rpcpassword=CHANGE_ME_TO_A_STRONG_PASSWORD
+
+# 共享节点不启用钱包（测试币用各端钱包 / 水龙头）
+disablewallet=1
+
+# 多人并发 RPC
+rpcworkqueue=32
+rpctimeout=30
+
+# ---------- 存储 ----------
+prune=2000
+
+# ---------- 性能（云服务器 4GB+ 内存时可适当增大 dbcache） ----------
+dbcache=1024
+maxconnections=64
+maxuploadtarget=5000
+
+printtoconsole=1

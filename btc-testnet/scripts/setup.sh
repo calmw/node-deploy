@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+if [[ ! -f .env ]]; then
+  cp .env.example .env
+  echo "已创建 .env"
+fi
+
+if [[ ! -f config/bitcoin.conf ]]; then
+  cp config/bitcoin.conf.example config/bitcoin.conf
+  if command -v openssl >/dev/null 2>&1; then
+    PASS="$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)"
+    if [[ "$(uname)" == "Darwin" ]]; then
+      sed -i '' "s/CHANGE_ME_TO_A_STRONG_PASSWORD/${PASS}/" config/bitcoin.conf
+    else
+      sed -i "s/CHANGE_ME_TO_A_STRONG_PASSWORD/${PASS}/" config/bitcoin.conf
+    fi
+    echo "已生成随机 RPC 密码并写入 config/bitcoin.conf"
+  else
+    echo "请手动编辑 config/bitcoin.conf 中的 rpcpassword"
+  fi
+else
+  echo "config/bitcoin.conf 已存在，跳过"
+fi
+
+chmod +x "$ROOT_DIR"/scripts/*.sh 2>/dev/null || true
+
+echo
+echo "初始化完成。下一步："
+echo "  ./scripts/start.sh"
+echo "  ./scripts/start.sh -f   # 启动并跟踪日志"
+echo
+if [[ -f .env ]] && grep -q '^RPC_BIND_ADDR=127.0.0.1' .env 2>/dev/null; then
+  echo "公司云部署：编辑 .env（RPC_BIND_ADDR / RPC_HOST）与 config/bitcoin.conf（rpcallowip），"
+  echo "  配置安全组后执行 docker compose down && docker compose up -d"
+  echo "  ./scripts/show-rpc-info.sh   # 查看给团队的 RPC 地址"
+fi
