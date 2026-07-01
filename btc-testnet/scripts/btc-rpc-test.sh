@@ -56,13 +56,18 @@ load_credentials() {
   fi
   local conf="${ROOT_DIR}/config/bitcoin.conf"
   if [[ -f "${conf}" ]]; then
-    # shellcheck disable=SC1090
-    source "${conf}"
-    RPC_USER="${RPC_USER:-${rpcuser:-}}"
-    RPC_PASS="${RPC_PASS:-${rpcpassword:-}}"
+    RPC_USER="${RPC_USER:-$("${ROOT_DIR}/scripts/conf-get.sh" rpcuser || true)}"
+    RPC_PASS="${RPC_PASS:-$("${ROOT_DIR}/scripts/conf-get.sh" rpcpassword || true)}"
   fi
   if [[ -z "${RPC_USER}" || -z "${RPC_PASS}" ]]; then
-    echo "错误: 未设置 RPC 凭证（--user/--pass 或 config/bitcoin.conf）" >&2
+    echo "错误: 未设置 RPC 凭证。" >&2
+    if [[ ! -f "${conf}" ]]; then
+      echo "  本机无 config/bitcoin.conf（开发机 clone 仓库时通常没有该文件）。" >&2
+    fi
+    echo "  远程测试请显式传入：" >&2
+    echo "    bash scripts/btc-rpc-test.sh --url ${RPC_URL} --user <rpcuser> --pass '<rpcpassword>'" >&2
+    echo "  或在服务器上执行（自动读 config/bitcoin.conf）：" >&2
+    echo "    bash scripts/btc-rpc-test.sh --url http://127.0.0.1:38332/" >&2
     exit 1
   fi
 }
@@ -174,17 +179,23 @@ main() {
 
   rpc_check "getblockchaininfo" getblockchaininfo '[]' chain_signet
   rpc_check "getnetworkinfo" getnetworkinfo '[]' network_active
-  rpc_check "getblockcount" getblockcount '[]' positive_int
+  rpc_check "getblockcount" getblockcount '[]' blockcount_height
   rpc_check "getbestblockhash" getbestblockhash '[]' block_hash
   rpc_check "getmempoolinfo" getmempoolinfo '[]' mempool_loaded
   rpc_check "getpeerinfo" getpeerinfo '[]' peer_list
   rpc_check "estimatesmartfee(6)" estimatesmartfee '[6,"economical"]' smart_fee
   rpc_check "getrawmempool" getrawmempool '[]' tx_list
-  rpc_check "getchaintxstats" getchaintxstats '[2016]' chaintxstats
 
-  local height best prev
+  local height best prev chaintx_window
   if height="$(rpc_result getblockcount 2>/dev/null)"; then
     height="$(python3 -c 'import json,sys; print(int(json.loads(sys.argv[1])))' "${height}")"
+    if [[ "${height}" -gt 0 ]]; then
+      chaintx_window="${height}"
+      [[ "${chaintx_window}" -gt 2016 ]] && chaintx_window=2016
+      rpc_check "getchaintxstats(${chaintx_window})" getchaintxstats "[${chaintx_window}]" chaintxstats
+    else
+      warn_msg "getchaintxstats — 跳过（height=0，同步未完成）"
+    fi
     rpc_check "getblockhash(${height})" getblockhash "[${height}]" block_hash
     if best="$(rpc_result getbestblockhash 2>/dev/null)"; then
       best="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]))' "${best}")"

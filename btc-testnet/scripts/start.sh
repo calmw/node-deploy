@@ -12,11 +12,20 @@ fi
 if [[ ! -f config/bitcoin.conf ]]; then
   echo "未找到 config/bitcoin.conf，先运行初始化..."
   "$ROOT_DIR/scripts/setup.sh"
+elif [[ -d config/bitcoin.conf ]]; then
+  echo "config/bitcoin.conf 是目录，正在修复..."
+  rm -rf config/bitcoin.conf
+  "$ROOT_DIR/scripts/setup.sh"
 fi
 
 if docker volume inspect btc-testnet-data >/dev/null 2>&1; then
   docker run --rm -v btc-testnet-data:/data alpine rm -f /data/bitcoin.conf 2>/dev/null || true
 fi
+
+[[ -f .env ]] && set -a && source .env && set +a
+export BITCOIN_IMAGE="${BITCOIN_IMAGE:-bitcoin/bitcoin:${BITCOIN_VERSION:-31.0}}"
+
+"$ROOT_DIR/scripts/pull-image.sh"
 
 echo "启动 Bitcoin Signet 节点..."
 docker compose up -d

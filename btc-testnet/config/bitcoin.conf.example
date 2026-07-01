@@ -1,5 +1,8 @@
 # Bitcoin Signet 测试网（团队开发用）
-# cp config/bitcoin.conf.example config/bitcoin.conf
+# 初始化：./scripts/setup.sh（由 setup 从本模板生成 config/bitcoin.conf）
+# 详见 README.md
+#
+# Bitcoin Core 31+：chain=signet 时，rpcbind / rpcallowip 等须写在 [signet] 段内
 
 # ---------- 网络 ----------
 chain=signet
@@ -7,9 +10,35 @@ chain=signet
 listen=1
 listenonion=0
 
-# ---------- RPC（团队共用） ----------
+# 云服务器 IPv6 常不完整，仅用 IPv4 可避免「有连接但 headers 不推进」
+onlynet=ipv4
+
+# 共享节点不启用钱包（测试币用各端钱包 / 水龙头）
+disablewallet=1
+
+# ---------- 存储 ----------
+prune=2000
+
+# ---------- 性能（云服务器 4GB+ 内存时可适当增大 dbcache） ----------
+dbcache=1024
+maxconnections=64
+maxuploadtarget=5000
+
+# RPC 超时（秒，须全局段；Core 31 不支持写在 [signet] 内）
+rpctimeout=30
+
+printtoconsole=1
+
+# ---------- RPC（Signet 专用段，Core 31+ 必填） ----------
+# 容器内使用 Signet 默认端口 38333/38332，与 docker-compose 映射一致
+[signet]
+rpcport=38332
 server=1
-rpcbind=0.0.0.0:8332
+rpcbind=0.0.0.0:38332
+
+# 固定 Signet 种子，加速初始 peer（可选，与 DNS seed 并存）
+addnode=seed.signet.bitcoin.sprovoost.nl
+addnode=nseed.jb55.com
 
 # Docker 桥接 + 本机
 rpcallowip=127.0.0.0/8
@@ -22,22 +51,11 @@ rpcallowip=10.0.0.0/8
 # 公司 VPN / 办公网：按实际网段取消注释（须与云安全组放行范围一致）
 # rpcallowip=10.100.0.0/16
 
+# Tailscale 远程访问
+# rpcallowip=100.64.0.0/10
+
 rpcuser=btc_signet_rpc
 rpcpassword=CHANGE_ME_TO_A_STRONG_PASSWORD
 
-# 共享节点不启用钱包（测试币用各端钱包 / 水龙头）
-disablewallet=1
-
 # 多人并发 RPC
 rpcworkqueue=32
-rpctimeout=30
-
-# ---------- 存储 ----------
-prune=2000
-
-# ---------- 性能（云服务器 4GB+ 内存时可适当增大 dbcache） ----------
-dbcache=1024
-maxconnections=64
-maxuploadtarget=5000
-
-printtoconsole=1

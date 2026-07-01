@@ -47,18 +47,30 @@ def run_assert(assert_name: str, result: object) -> None:
     elif assert_name == "chain_signet":
         if result.get("chain") != "signet":
             out("FAIL", f"chain={result.get('chain')}，期望 signet")
-        elif result.get("blocks", 0) <= 0:
-            out("FAIL", f"blocks={result.get('blocks')}")
         else:
+            blocks = result.get("blocks", 0)
+            headers = result.get("headers", 0)
             p = result.get("verificationprogress", 0)
             ibd = result.get("initialblockdownload", True)
             out(
                 "PASS",
-                f"signet blocks={result['blocks']} headers={result['headers']} "
+                f"signet blocks={blocks} headers={headers} "
                 f"progress={p:.6f} ibd={ibd}",
             )
-            if ibd or p < 0.999:
+            if blocks == 0 and headers == 0:
+                out("WARN", "headers/blocks 为 0；Core 31 预同步阶段 RPC 可能仍如此，查日志 Pre-synchronizing")
+            elif ibd or p < 0.999:
                 out("WARN", f"未完全同步 progress={p}")
+        return
+
+    if assert_name == "blockcount_height":
+        n = int(result)
+        if n < 0:
+            out("FAIL", f"值无效: {n}")
+        else:
+            out("PASS", f"height={n}")
+            if n == 0:
+                out("WARN", "高度 0（预同步或未落盘）；同步完成后应 >0")
         return
 
     if assert_name == "network_active":

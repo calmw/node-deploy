@@ -22,16 +22,14 @@ if [[ -z "${RPC_HOST}" ]]; then
   fi
 fi
 
-RPC_USER=""
+RPC_USER="btc_signet_rpc"
 if [[ -f config/bitcoin.conf ]]; then
-  # shellcheck disable=SC1090
-  source config/bitcoin.conf
-  RPC_USER="${rpcuser:-btc_signet_rpc}"
+  RPC_USER="$("${ROOT_DIR}/scripts/conf-get.sh" rpcuser || echo btc_signet_rpc)"
 fi
 
 echo "=== Signet RPC（团队开发） ==="
 echo "URL:   http://${RPC_HOST}:${RPC_PORT}/"
-echo "User:  ${RPC_USER:-btc_signet_rpc}"
+echo "User:  ${RPC_USER}"
 echo "Pass:  见 config/bitcoin.conf（勿提交 git；建议走公司密钥库分发）"
 echo "Chain: signet"
 echo
