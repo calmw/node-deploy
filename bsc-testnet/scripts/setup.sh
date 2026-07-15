@@ -45,16 +45,66 @@ print(g.get("config", {}).get("chainId", 0))
 PY
 }
 
+write_config_toml() {
+  mkdir -p "${CONFIG_DIR}"
+  cat > "${CONFIG_DIR}/config.toml" <<'EOF'
+[Eth]
+NetworkId = 97
+
+[Eth.Miner]
+GasCeil = 35000000
+GasPrice = 100000000
+
+[Eth.TxPool]
+Locals = []
+NoLocals = true
+Journal = "transactions.rlp"
+Rejournal = 3600000000000
+PriceLimit = 100000000
+PriceBump = 10
+AccountSlots = 16
+GlobalSlots = 4096
+AccountQueue = 64
+GlobalQueue = 1024
+Lifetime = 10800000000000
+
+[Eth.GPO]
+Blocks = 20
+Percentile = 60
+OracleThreshold = 1000
+
+[Node]
+DataDir = "node"
+InsecureUnlockAllowed = false
+IPCPath = "geth.ipc"
+HTTPHost = "127.0.0.1"
+HTTPPort = 8575
+HTTPVirtualHosts = ["*"]
+HTTPModules = ["debug", "eth", "net", "web3", "txpool", "parlia"]
+WSPort = 8576
+WSModules = ["net", "web3", "eth"]
+
+[Node.P2P]
+MaxPeers = 50
+NoDiscovery = false
+DialRatio = 1
+TrustedNodes = []
+StaticNodes = []
+ListenAddr = ":30311"
+EnableMsgEvents = false
+
+[Node.LogConfig]
+FileRoot = ""
+FilePath = "bsc.log"
+MaxBytesSize = 10485760
+Level = "info"
+EOF
+  cp -f "${CONFIG_DIR}/config.toml" "${TEMPLATE}"
+  echo "[setup] 已写入 config.toml（StaticNodes 留空，peer 走 bootnodes）"
+}
+
 patch_config_toml() {
-  local cfg="${CONFIG_DIR}/config.toml"
-  # 以模板为准（StaticNodes 留空，peer 由 start.sh --bootnodes 与 refresh 脚本维护）
-  cp -f "${TEMPLATE}" "${cfg}"
-  if ! grep -q 'ListenAddr' "${cfg}"; then
-    sed -i '/^\[Node\.LogConfig\]/i ListenAddr = ":30311"\nEnableMsgEvents = false\n' "${cfg}"
-  fi
-  if ! grep -q 'DialRatio' "${cfg}"; then
-    sed -i '/^\[Node\.P2P\]/a DialRatio = 1' "${cfg}"
-  fi
+  write_config_toml
 }
 
 validate_config_toml() {
