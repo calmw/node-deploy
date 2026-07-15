@@ -7,7 +7,7 @@ cd "$ROOT_DIR"
 
 [[ -f .env ]] && set -a && source .env && set +a
 
-RPC_PORT="${RPC_PORT:-38332}"
+RPC_PORT="${RPC_PORT:-48332}"
 RPC_BIND="${RPC_BIND_ADDR:-127.0.0.1}"
 RPC_HOST="${RPC_HOST:-}"
 

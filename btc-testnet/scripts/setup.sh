@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-mkdir -p config
+mkdir -p config data
 if [[ -d config/bitcoin.conf ]]; then
   echo "警告: config/bitcoin.conf 是目录（未 setup 就 compose up 会导致），正在删除..."
   rm -rf config/bitcoin.conf

@@ -18,9 +18,9 @@ elif [[ -d config/bitcoin.conf ]]; then
   "$ROOT_DIR/scripts/setup.sh"
 fi
 
-if docker volume inspect btc-testnet-data >/dev/null 2>&1; then
-  docker run --rm -v btc-testnet-data:/data alpine rm -f /data/bitcoin.conf 2>/dev/null || true
-fi
+mkdir -p data
+# 避免 datadir 内残留 bitcoin.conf 与 bind mount 冲突
+rm -f data/bitcoin.conf
 
 [[ -f .env ]] && set -a && source .env && set +a
 export BITCOIN_IMAGE="${BITCOIN_IMAGE:-bitcoin/bitcoin:${BITCOIN_VERSION:-31.0}}"

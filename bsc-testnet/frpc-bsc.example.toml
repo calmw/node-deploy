@@ -1,0 +1,24 @@
+# FRP 穿透示例（Chapel 测试网 P2P 30311）
+# 云服务器 frps.toml 的 allowPorts 需包含 { single = 30311 }
+
+[[proxies]]
+name = "bsc-testnet-30311-tcp"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 30311
+remotePort = 30311
+
+[[proxies]]
+name = "bsc-testnet-30311-udp"
+type = "udp"
+localIP = "127.0.0.1"
+localPort = 30311
+remotePort = 30311
+
+# RPC 建议走 Tailscale，一般不需 FRP
+# [[proxies]]
+# name = "bsc-testnet-8575-tcp"
+# type = "tcp"
+# localIP = "127.0.0.1"
+# localPort = 8575
+# remotePort = 8575

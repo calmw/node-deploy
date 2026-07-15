@@ -6,7 +6,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PARSE_PY="${ROOT_DIR}/scripts/btc-rpc-test-parse.py"
 EXTRACT_PY="${ROOT_DIR}/scripts/btc-rpc-test-extract.py"
 
-RPC_URL="${BTC_RPC_URL:-http://127.0.0.1:38332/}"
+[[ -f "${ROOT_DIR}/.env" ]] && set -a && source "${ROOT_DIR}/.env" && set +a
+RPC_PORT="${RPC_PORT:-48332}"
+RPC_BIND="${RPC_BIND_ADDR:-127.0.0.1}"
+RPC_URL="${BTC_RPC_URL:-http://${RPC_BIND}:${RPC_PORT}/}"
 RPC_USER="${BTC_RPC_USER:-}"
 RPC_PASS="${BTC_RPC_PASS:-}"
 
@@ -23,7 +26,7 @@ usage() {
 对 Bitcoin Core HTTP RPC 做连通性与常用接口检查。
 
 选项:
-  --url URL       RPC 地址（默认: http://127.0.0.1:38332/）
+  --url URL       RPC 地址（默认读 .env：http://RPC_BIND_ADDR:RPC_PORT/）
   --user USER     rpcuser（或环境变量 BTC_RPC_USER）
   --pass PASS     rpcpassword（或环境变量 BTC_RPC_PASS）
   -h, --help      显示帮助
@@ -31,8 +34,8 @@ usage() {
 凭证: 命令行 > 环境变量 > btc-testnet/config/bitcoin.conf
 
 示例:
-  bash scripts/btc-rpc-test.sh --url http://127.0.0.1:38332/
-  bash scripts/btc-rpc-test.sh --url http://100.x.x.x:38332/ --user ... --pass ...
+  bash scripts/btc-rpc-test.sh --url http://127.0.0.1:48332/
+  bash scripts/btc-rpc-test.sh --url http://100.x.x.x:48332/ --user ... --pass ...
 
 注意: 远程访问需在 bitcoin.conf 配置 rpcallowip，并与云安全组来源网段一致。
 EOF
@@ -67,7 +70,7 @@ load_credentials() {
     echo "  远程测试请显式传入：" >&2
     echo "    bash scripts/btc-rpc-test.sh --url ${RPC_URL} --user <rpcuser> --pass '<rpcpassword>'" >&2
     echo "  或在服务器上执行（自动读 config/bitcoin.conf）：" >&2
-    echo "    bash scripts/btc-rpc-test.sh --url http://127.0.0.1:38332/" >&2
+    echo "    bash scripts/btc-rpc-test.sh --url http://127.0.0.1:48332/" >&2
     exit 1
   fi
 }

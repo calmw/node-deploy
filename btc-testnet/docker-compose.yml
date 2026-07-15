@@ -7,10 +7,10 @@ services:
     ports:
       # Signet P2P：容器内 38333（与 chain 默认一致）
       - "${P2P_PORT:-38333}:38333"
-      # Signet RPC：容器内 38332；绑定见 .env 的 RPC_BIND_ADDR
-      - "${RPC_BIND_ADDR:-127.0.0.1}:${RPC_PORT:-38332}:38332"
+      # Signet RPC：宿主机 RPC_PORT → 容器内 38332（见 .env；同机主网占 8332）
+      - "${RPC_BIND_ADDR:-127.0.0.1}:${RPC_PORT:-48332}:38332"
     volumes:
-      - bitcoin_data:/home/bitcoin/.bitcoin
+      - ./data:/home/bitcoin/.bitcoin
       # 勿加 :ro；勿用 -conf 指向其他路径（Core 31+ 会因 datadir 残留配置报错）
       - ./config/bitcoin.conf:/home/bitcoin/.bitcoin/bitcoin.conf
     command: -printtoconsole
@@ -39,7 +39,3 @@ services:
           memory: 2G
         reservations:
           memory: 512M
-
-volumes:
-  bitcoin_data:
-    name: btc-testnet-data

@@ -1,0 +1,71 @@
+services:
+  geth:
+    image: ${GETH_IMAGE:-ethereum/client-go:stable}
+    container_name: sepolia-geth
+    restart: unless-stopped
+    ports:
+      - "${HTTP_BIND_ADDR:-127.0.0.1}:${HTTP_PORT:-8545}:8545"
+      - "${WS_BIND_ADDR:-127.0.0.1}:${WS_PORT:-8546}:8546"
+      - "${P2P_PORT:-30303}:30303"
+      - "${P2P_PORT:-30303}:30303/udp"
+    volumes:
+      - ./data/geth:/data
+      - ./config/jwtsecret:/config/jwtsecret:ro
+      - ./scripts/geth-start.sh:/scripts/geth-start.sh:ro
+    entrypoint: ["/bin/sh", "/scripts/geth-start.sh"]
+    env_file:
+      - .env
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
+    mem_limit: ${MEM_LIMIT:-16g}
+    memswap_limit: ${MEMSWAP_LIMIT:-24g}
+    mem_reservation: ${MEM_RESERVATION:-8g}
+    networks:
+      - sepolia-net
+
+  lighthouse:
+    image: ${LIGHTHOUSE_IMAGE:-sigp/lighthouse:latest}
+    container_name: sepolia-lighthouse
+    restart: unless-stopped
+    depends_on:
+      - geth
+    ports:
+      - "${BEACON_BIND_ADDR:-127.0.0.1}:${BEACON_PORT:-5052}:5052"
+      - "${CL_P2P_PORT:-9000}:9000"
+      - "${CL_P2P_PORT:-9000}:9000/udp"
+    volumes:
+      - ./data/lighthouse:/data
+      - ./config/jwtsecret:/config/jwtsecret:ro
+    command:
+      - lighthouse
+      - bn
+      - --network=sepolia
+      - --datadir=/data
+      - --checkpoint-sync-url=${CHECKPOINT_SYNC_URL:-https://checkpoint-sync.sepolia.ethpandaops.io}
+      - --execution-endpoint=http://geth:8551
+      - --execution-jwt=/config/jwtsecret
+      - --http
+      - --http-address=0.0.0.0
+      - --http-port=5052
+      - --http-allow-origin=*
+      - --metrics
+      - --metrics-address=0.0.0.0
+      - --metrics-port=5054
+      - --disable-deposit-contract-sync
+    env_file:
+      - .env
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
+    mem_limit: ${CL_MEM_LIMIT:-8g}
+    networks:
+      - sepolia-net
+
+networks:
+  sepolia-net:
+    name: sepolia-node-network

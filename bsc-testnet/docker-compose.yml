@@ -1,0 +1,23 @@
+services:
+  bsc:
+    image: ${BSC_IMAGE:-ghcr.io/bnb-chain/bsc:1.7.3}
+    container_name: bsc-testnet-node
+    restart: unless-stopped
+    # host 网络：Chapel P2P 30311；与主网 30303 不冲突
+    network_mode: host
+    env_file:
+      - .env
+    volumes:
+      - ./config:/bsc/config:ro
+      - ./data/node:/bsc/node
+      - ./data/incr:/bsc/incr
+      - ./scripts/start.sh:/bsc/scripts/start.sh:ro
+    entrypoint: ["/sbin/tini", "--", "/bin/bash", "/bsc/scripts/start.sh"]
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
+    mem_limit: ${MEM_LIMIT:-16g}
+    memswap_limit: ${MEMSWAP_LIMIT:-24g}
+    mem_reservation: ${MEM_RESERVATION:-8g}
