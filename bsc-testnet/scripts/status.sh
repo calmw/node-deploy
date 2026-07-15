@@ -29,13 +29,17 @@ else
 fi
 
 if docker ps --format '{{.Names}}' | grep -qx "${CONTAINER}"; then
+  attach() {
+    docker exec "${CONTAINER}" geth attach --datadir /bsc/node --exec "$1" 2>/dev/null
+  }
   echo
   echo "=== 链状态 ==="
-  docker exec "${CONTAINER}" geth attach --datadir /bsc/node --exec "
-    var id=eth.chainId();
-    print('chainId=' + id);
-    print('block=' + eth.blockNumber);
-    print('peers=' + net.peerCount);
-    print('syncing=' + JSON.stringify(eth.syncing));
-  " 2>/dev/null || echo "geth attach 失败，查看日志"
+  if CHAIN_ID="$(attach 'eth.chainId()')"; then
+    echo "chainId=${CHAIN_ID}"
+    echo "block=$(attach 'eth.blockNumber')"
+    echo "peers=$(attach 'net.peerCount')"
+    echo "syncing=$(attach 'JSON.stringify(eth.syncing)')"
+  else
+    echo "geth attach 失败 → docker compose logs --tail 40 bsc"
+  fi
 fi
