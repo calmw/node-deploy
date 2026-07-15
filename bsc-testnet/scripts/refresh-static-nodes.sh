@@ -80,11 +80,11 @@ if not enodes:
     print("[refresh] 错误: enode 列表为空，未写入 config", file=sys.stderr)
     sys.exit(1)
 s = open(cfg).read()
-arr = "StaticNodes = [\n" + ''.join('  "%s",\n' % e for e in enodes) + "]"
-if re.search(r'StaticNodes\s*=\s*\[[^\]]*\]', s, flags=re.DOTALL):
-    s = re.sub(r'StaticNodes\s*=\s*\[[^\]]*\]', arr, s, count=1, flags=re.DOTALL)
+line = "StaticNodes = [" + ", ".join('"%s"' % e for e in enodes) + "]"
+if re.search(r'StaticNodes\s*=\s*\[[^\]]*\]', s):
+    s = re.sub(r'StaticNodes\s*=\s*\[[^\]]*\]', line, s, count=1)
 else:
-    s = re.sub(r'(?m)^(\[Node\.P2P\].*)$', r'\1\n' + arr, s, count=1)
+    s = re.sub(r'(?m)^(\[Node\.P2P\].*)$', r'\1\n' + line, s, count=1)
 if not re.search(r'(?m)^\s*DialRatio\s*=', s):
     if re.search(r'(?m)^NoDiscovery\s*=.*$', s):
         s = re.sub(r'(?m)^(NoDiscovery\s*=.*)$', r'\1\nDialRatio = 1', s, count=1)

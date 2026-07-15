@@ -47,31 +47,27 @@ PY
 
 patch_config_toml() {
   local cfg="${CONFIG_DIR}/config.toml"
-  python3 - "${cfg}" <<'PY'
-import re, sys
-path = sys.argv[1]
-text = open(path).read()
-if "NetworkId = 97" not in text:
-    text = re.sub(r"NetworkId\s*=\s*\d+", "NetworkId = 97", text, count=1)
-if "DialRatio" not in text:
-    text = text.replace(
-        "[Node.P2P]",
-        "[Node.P2P]\nDialRatio = 1",
-        1,
-    )
-else:
-    text = re.sub(r"DialRatio\s*=\s*\d+", "DialRatio = 1", text, count=1)
-if re.search(r'ListenAddr\s*=', text):
-    text = re.sub(r'ListenAddr\s*=\s*"[^"]*"', 'ListenAddr = ":30311"', text, count=1)
-else:
-    text = re.sub(
-        r"(\[Node\.P2P\][^\[]*)",
-        r'\1ListenAddr = ":30311"\n',
-        text,
-        count=1,
-        flags=re.DOTALL,
-    )
-open(path, "w").write(text)
+  # 以模板为准（StaticNodes 留空，peer 由 start.sh --bootnodes 与 refresh 脚本维护）
+  cp -f "${TEMPLATE}" "${cfg}"
+  if ! grep -q 'ListenAddr' "${cfg}"; then
+    sed -i '/^\[Node\.LogConfig\]/i ListenAddr = ":30311"\nEnableMsgEvents = false\n' "${cfg}"
+  fi
+  if ! grep -q 'DialRatio' "${cfg}"; then
+    sed -i '/^\[Node\.P2P\]/a DialRatio = 1' "${cfg}"
+  fi
+}
+
+validate_config_toml() {
+  local cfg="${CONFIG_DIR}/config.toml"
+  python3 - "${cfg}" <<'PY' || { echo "[setup] config.toml 校验失败" >&2; return 1; }
+import sys
+try:
+    import tomllib
+    tomllib.load(open(sys.argv[1], "rb"))
+except ImportError:
+    import tomli as tomllib
+    tomllib.load(open(sys.argv[1], "rb"))
+print("[setup] config.toml 语法 OK")
 PY
 }
 
@@ -87,12 +83,14 @@ merge_static_nodes() {
 import re, sys
 cfg, enode_file = sys.argv[1], sys.argv[2]
 enodes = [l.strip() for l in open(enode_file) if l.strip().startswith('enode://')]
-if enodes:
-    s = open(cfg).read()
-    arr = "StaticNodes = [\n" + ''.join('  "%s",\n' % e for e in enodes) + "]"
-    s = re.sub(r'StaticNodes\s*=\s*\[[^\]]*\]', arr, s, count=1, flags=re.DOTALL)
-    open(cfg, 'w').write(s)
-    print("[setup] 已保留 %d 个已有 StaticNodes" % len(enodes))
+if not enodes:
+    sys.exit(0)
+# 单行数组，避免 geth TOML 对多行 StaticNodes 解析失败
+line = "StaticNodes = [" + ", ".join('"%s"' % e for e in enodes) + "]"
+s = open(cfg).read()
+s = re.sub(r"StaticNodes\s*=\s*\[[^\]]*\]", line, s, count=1)
+open(cfg, 'w').write(s)
+print("[setup] 已写入 %d 个 StaticNodes（单行格式）" % len(enodes))
 PYEOF
   rm -f "${OLD_ENODE_FILE}"
 }
@@ -104,10 +102,9 @@ download_testnet_bundle() {
   curl -fsSL -o "${TMP_ZIP}" \
     "https://github.com/bnb-chain/bsc/releases/download/v${BSC_VERSION}/testnet.zip"
   unzip -p "${TMP_ZIP}" testnet/genesis.json > "${CONFIG_DIR}/genesis.json"
-  unzip -p "${TMP_ZIP}" testnet/config.toml > "${CONFIG_DIR}/config.toml"
   rm -f "${TMP_ZIP}"
   patch_config_toml
-  merge_static_nodes
+  validate_config_toml
   cp -f "${CONFIG_DIR}/config.toml" "${TEMPLATE}"
   echo "[setup] genesis + config.toml 已更新 (chainId=97)"
 }
@@ -131,6 +128,7 @@ ensure_testnet_config() {
   else
     patch_config_toml
     merge_static_nodes
+    validate_config_toml
   fi
   mkdir -p "${DATA_DIR}" "${INCR_DIR}"
   fix_config_perms
