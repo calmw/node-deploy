@@ -99,6 +99,8 @@ Chapel 测试网 BNB 水龙头：搜索 “BSC testnet faucet” 或 [testnet.bn
 |------|------|
 | `chainId` 不是 97 | `bash scripts/setup.sh repair` 重新拉 testnet.zip |
 | 无 peer | `bash scripts/refresh-static-nodes.sh`；确认 `P2P_PORT=30311` |
+| 8575 无响应 / 只有 8545 在监听 | 查 `docker compose ps`；若 Restarting → `docker compose logs --tail 50 bsc`；曾跑主网数据 → `bash scripts/reset-data.sh` 后重启 |
+| repair 报 `.env not found` | 先 `cp .env.example .env`，再 `docker compose up -d` |
 | 与主网端口冲突 | 对照上表，主网勿改 8545/30303 |
 | 误用主网快照 | 清空 `data/node` 后 snap 重来 |
 

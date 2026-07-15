@@ -155,6 +155,13 @@ cmd_repair() {
   docker compose -f "${ROOT_DIR}/docker-compose.yml" logs --tail 30 bsc 2>&1 || true
   echo ""
   ensure_testnet_config
+  if [[ ! -f "${ROOT_DIR}/.env" ]]; then
+    cp "${ROOT_DIR}/.env.example" "${ROOT_DIR}/.env"
+    echo "[setup] 已创建 .env（从 .env.example）"
+  fi
+  if [[ -f "${DATA_DIR}/geth/chaindata/CURRENT" ]]; then
+    echo "[setup] 警告: data/node 已有链数据。若曾跑过主网配置，请先 bash scripts/reset-data.sh"
+  fi
   echo ""
   echo "=== 重启节点 ==="
   docker compose -f "${ROOT_DIR}/docker-compose.yml" down 2>/dev/null || true
@@ -164,8 +171,10 @@ cmd_repair() {
     echo "=== 节点已运行 ==="
     docker exec "${CONTAINER_NAME}" geth attach --datadir /bsc/node --exec "net.peerCount" 2>/dev/null \
       || echo "(geth 仍在启动，稍后再查)"
+    echo "  检查: bash scripts/status.sh"
   else
-    docker compose -f "${ROOT_DIR}/docker-compose.yml" logs --tail 20 bsc
+    echo "=== 仍在重启或已退出，最新日志 ==="
+    docker compose -f "${ROOT_DIR}/docker-compose.yml" logs --tail 30 bsc
   fi
 }
 
