@@ -1,150 +1,71 @@
 #!/usr/bin/env bash
-# BSC 节点启动脚本（由 docker-compose 挂载调用）
+# BSC Reth 节点启动（custom prune，勿 --full）
 set -euo pipefail
 
-: "${BSC_SYNC_MODE:=fast}"
-: "${HTTP_BIND_ADDR:?HTTP_BIND_ADDR is required (use Tailscale IP: tailscale ip -4)}"
+: "${HTTP_BIND_ADDR:?HTTP_BIND_ADDR is required (Tailscale: tailscale ip -4)}"
 
-NAT_MODE="${NAT_MODE:-any}"
-case "${NAT_MODE}" in
-  extip)
-    : "${NAT_EXTIP:?NAT_EXTIP is required when NAT_MODE=extip}"
-    NAT_SETTING="extip:${NAT_EXTIP}"
-    ;;
-  extip:*)
-    NAT_SETTING="${NAT_MODE}"
-    ;;
-  *)
-    NAT_SETTING="${NAT_MODE}"
-    ;;
-esac
+DATADIR="${RETH_DATADIR:-/data}"
+CONFIG="${DATADIR}/reth.toml"
 
-HTTP_VHOSTS="${HTTP_VHOSTS:-localhost,127.0.0.1,${HTTP_BIND_ADDR}}"
-WS_BIND_ADDR="${WS_BIND_ADDR:-${HTTP_BIND_ADDR}}"
-
-CONFIG_PATH="/bsc/config/config.toml"
-GENESIS_PATH="/bsc/config/genesis.json"
-if [[ ! -f "${CONFIG_PATH}" ]]; then
-  if [[ -f "/bsc/config/mainnet/config.toml" ]]; then
-    CONFIG_PATH="/bsc/config/mainnet/config.toml"
-    GENESIS_PATH="/bsc/config/mainnet/genesis.json"
-    echo "[bsc] 使用配置: ${CONFIG_PATH}（建议宿主机执行 bash scripts/setup.sh repair）"
-  else
-    echo "[bsc] 错误: 未找到 config.toml，请运行 bash scripts/setup.sh" >&2
-    exit 1
-  fi
-fi
-
-if [[ ! -f "${GENESIS_PATH}" ]]; then
-  echo "[bsc] 错误: 未找到 genesis.json" >&2
+if [[ ! -f "${CONFIG}" ]]; then
+  echo "[reth] 错误: 未找到 ${CONFIG}，请先 bash scripts/setup.sh" >&2
   exit 1
 fi
 
-CHAIN_DATA="/bsc/node/geth/chaindata"
-HAS_SNAPSHOT=false
-[[ -f "${CHAIN_DATA}/CURRENT" ]] && HAS_SNAPSHOT=true
+# 官方文档推荐 trusted peers（加速出块同步）
+DEFAULT_TRUSTED_PEERS="enode://551c8009f1d5bbfb1d64983eeb4591e51ad488565b96cdde7e40a207cfd6c8efa5b5a7fa88ed4e71229c988979e4c720891287ddd7d00ba114408a3ceb972ccb@34.245.203.3:30311,enode://c637c90d6b9d1d0038788b163a749a7a86fed2e7d0d13e5dc920ab144bb432ed1e3e00b54c1a93cecba479037601ba9a5937a88fe0be949c651043473c0d1e5b@34.244.120.206:30311,enode://bac6a548c7884270d53c3694c93ea43fa87ac1c7219f9f25c9d57f6a2fec9d75441bc4bad1e81d78c049a1c4daf3b1404e2bbb5cd9bf60c0f3a723bbaea110bc@3.255.117.110:30311,enode://94e56c84a5a32e2ef744af500d0ddd769c317d3c3dd42d50f5ea95f5f3718a5f81bc5ce32a7a3ea127bc0f10d3f88f4526a67f5b06c1d85f9cdfc6eb46b2b375@3.255.231.219:30311"
 
-prepare_datadir() {
-  case "${BSC_SYNC_MODE}" in
-    incr)
-      # incr 从远程下载 base snapshot，绝对不能 geth init
-      if ${HAS_SNAPSHOT}; then
-        echo "[bsc] incr 模式：检测到已有 chaindata，继续增量同步"
-        return
-      fi
-      echo "[bsc] incr 模式：清空 datadir，从远程下载 base snapshot..."
-      rm -rf /bsc/node/geth /bsc/node/.bsc_genesis_initialized
-      rm -rf /bsc/incr/*
-      ;;
-    snap)
-      if ${HAS_SNAPSHOT}; then
-        echo "[bsc] snap 模式：检测到已有 chaindata，继续同步"
-        return
-      fi
-      [[ -d /bsc/node/geth ]] && rm -rf /bsc/node/geth
-      echo "[bsc] snap 模式：初始化 genesis..."
-      geth --datadir /bsc/node --db.engine pebble --state.scheme path init "${GENESIS_PATH}"
-      echo "[bsc] genesis 初始化完成，将从网络 snap 同步"
-      ;;
-    fast|pruned)
-      if ! ${HAS_SNAPSHOT}; then
-        echo "[bsc] 错误: ${BSC_SYNC_MODE} 模式需先导入 snapshot" >&2
-        echo "[bsc]   fast   → bash scripts/snapshot.sh start" >&2
-        echo "[bsc]   pruned → 见 README 官方快照说明" >&2
-        exit 1
-      fi
-      echo "[bsc] ${BSC_SYNC_MODE} 模式：使用已导入的 snapshot"
-      ;;
-    *)
-      echo "[bsc] 未知 BSC_SYNC_MODE=${BSC_SYNC_MODE}" >&2
-      echo "[bsc] 支持: snap | incr | fast | pruned" >&2
-      exit 1
-      ;;
-  esac
-}
+TRUSTED="${RETH_TRUSTED_PEERS:-${DEFAULT_TRUSTED_PEERS}}"
+WS_BIND="${WS_BIND_ADDR:-${HTTP_BIND_ADDR}}"
 
-prepare_datadir
-
-# BSC mainnet 官方 bootnodes（与 params/bootnodes.go 一致，FRP 场景下加强 outbound 发现）
-DEFAULT_BOOTNODES="enode://433c8bfdf53a3e2268ccb1b829e47f629793291cbddf0c76ae626da802f90532251fc558e2e0d10d6725e759088439bf1cd4714716b03a259a35d4b2e4acfa7f@52.69.102.73:30311,enode://571bee8fb902a625942f10a770ccf727ae2ba1bab2a2b64e121594a99c9437317f6166a395670a00b7d93647eacafe598b6bbcef15b40b6d1a10243865a3e80f@35.73.84.120:30311,enode://fac42fb0ba082b7d1eebded216db42161163d42e4f52c9e47716946d64468a62da4ba0b1cac0df5e8bf1e5284861d757339751c33d51dfef318be5168803d0b5@18.203.152.54:30311,enode://3063d1c9e1b824cfbb7c7b6abafa34faec6bb4e7e06941d218d760acdd7963b274278c5c3e63914bd6d1b58504c59ec5522c56f883baceb8538674b92da48a96@34.250.32.100:30311,enode://ad78c64a4ade83692488aa42e4c94084516e555d3f340d9802c2bf106a3df8868bc46eae083d2de4018f40e8d9a9952c32a0943cd68855a9bc9fd07aac982a6d@34.204.214.24:30311,enode://5db798deb67df75d073f8e2953dad283148133acb520625ea804c9c4ad09a35f13592a762d8f89056248f3889f6dcc33490c145774ea4ff2966982294909b37a@107.20.191.97:30311"
-
-SYNC_MODE="full"
-EXTRA_ARGS=()
-
-case "${BSC_SYNC_MODE}" in
-  snap)
-    SYNC_MODE="snap"
+NAT_ARGS=()
+case "${NAT_MODE:-any}" in
+  extip)
+    : "${NAT_EXTIP:?NAT_EXTIP required when NAT_MODE=extip}"
+    NAT_ARGS=(--nat "extip:${NAT_EXTIP}")
     ;;
-  fast)
-    EXTRA_ARGS+=(
-      --tries-verify-mode none
-      --history.transactions 1152000
-      --history.blocks 1152000
-    )
-    echo "[bsc] fast 模式: trace 窗口由 triesInMemory=${TRIES_IN_MEMORY:-15000} 控制（history.state 不生效）"
+  none)
+    NAT_ARGS=(--nat none)
     ;;
-  incr)
-    EXTRA_ARGS+=(
-      --incr.use-remote
-      --incr.remote-url "https://download.snapshots.bnbchain.world/incr-snapshot"
-      --incr.datadir /bsc/incr
-    )
+  *)
+    NAT_ARGS=(--nat any)
     ;;
 esac
 
-COMMON_ARGS=(
-  --config "${CONFIG_PATH}"
-  --datadir /bsc/node
-  --syncmode "${SYNC_MODE}"
-  --db.engine pebble
-  --state.scheme path
+HTTP_API="${HTTP_API:-eth,net,web3,txpool,debug,trace,admin,rpc,reth,ots}"
+WS_API="${WS_API:-eth,net,web3,txpool,debug,trace}"
+
+ARGS=(
+  node
+  --chain=bsc
+  --datadir="${DATADIR}"
   --port "${P2P_PORT:-30303}"
-  --nat "${NAT_SETTING}"
-  --bootnodes "${BSC_BOOTNODES:-${DEFAULT_BOOTNODES}}"
-  --maxpeers "${MAX_PEERS:-80}"
-  --maxpendpeers "${MAX_PEND_PEERS:-100}"
-  --cache "${CACHE_MB:-4096}"
-  --triesInMemory "${TRIES_IN_MEMORY:-15000}"
-  --history.state "${HISTORY_STATE:-15000}"
-  --history.transactions 0
-  --history.blocks 360000
-  --history.logs.disable
+  --max-peers "${MAX_PEERS:-100}"
+  "${NAT_ARGS[@]}"
+  --trusted-peers "${TRUSTED}"
+  --enable-prefetch
+  --optimize.enable-execution-cache
   --http
   --http.addr "${HTTP_BIND_ADDR}"
   --http.port "${HTTP_PORT:-8545}"
-  --http.vhosts "${HTTP_VHOSTS}"
-  --http.api eth,net,web3,txpool,debug,parlia
-  --http.corsdomain "*"
+  --http.api "${HTTP_API}"
   --ws
-  --ws.addr "${WS_BIND_ADDR}"
+  --ws.addr "${WS_BIND}"
   --ws.port "${WS_PORT:-8546}"
-  --ws.origins "*"
-  --ws.api eth,net,web3,debug,parlia
-  --metrics
-  --metrics.addr 127.0.0.1
-  --metrics.port 6060
-  --verbosity 3
+  --ws.api "${WS_API}"
+  --metrics "127.0.0.1:${METRICS_PORT:-6060}"
+  --log.file.directory "${DATADIR}/logs"
 )
 
-echo "[bsc] 启动模式: ${BSC_SYNC_MODE} (syncmode=${SYNC_MODE}, nat=${NAT_SETTING})"
-exec geth "${COMMON_ARGS[@]}" "${EXTRA_ARGS[@]}"
+echo "[reth] bsc mainnet | datadir=${DATADIR} | prune=reth.toml | p2p=${P2P_PORT:-30303} | rpc=${HTTP_BIND_ADDR}:${HTTP_PORT:-8545}"
+echo "[reth] 未使用 --full；历史窗口见 reth.toml 中 distance"
+
+# 镜像入口一般为 reth-bsc；兼容不同 ENTRYPOINT
+if command -v bsc-reth >/dev/null 2>&1; then
+  exec bsc-reth "${ARGS[@]}"
+fi
+if command -v reth-bsc >/dev/null 2>&1; then
+  exec reth-bsc "${ARGS[@]}"
+fi
+echo "[reth] 错误: 容器内未找到 reth-bsc / bsc-reth 可执行文件" >&2
+exit 1
