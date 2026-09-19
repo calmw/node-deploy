@@ -1,0 +1,26 @@
+services:
+  bsc:
+    image: ${BSC_IMAGE:-ghcr.io/bnb-chain/bsc:1.7.3}
+    container_name: bsc-node
+    restart: unless-stopped
+    # host 网络：P2P 30303 直接监听宿主机；避免 Docker UDP 映射问题
+    network_mode: host
+    env_file:
+      - .env
+    volumes:
+      - ./config:/bsc/config:ro
+      - ./data/node:/bsc/node
+      - ./data/incr:/bsc/incr
+      - ./scripts/start.sh:/bsc/scripts/start.sh:ro
+    entrypoint: ["/sbin/tini", "--", "/bin/bash", "/bsc/scripts/start.sh"]
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
+    # fast + triesInMemory=15000：进程内存约 40~70G，按物理内存调整 MEM_LIMIT / MEMSWAP_LIMIT。
+    # mem_limit=物理内存上限；memswap_limit=内存+swap 总上限（差额即允许使用的 swap）。
+    # 例：MEM_LIMIT=16g + MEMSWAP_LIMIT=32g → 允许 16G 内存 + 16G swap。
+    mem_limit: ${MEM_LIMIT:-16g}
+    memswap_limit: ${MEMSWAP_LIMIT:-32g}
+    mem_reservation: ${MEM_RESERVATION:-8g}

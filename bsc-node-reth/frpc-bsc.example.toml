@@ -1,0 +1,27 @@
+# frpc 配置片段 — 追加到家里服务器 /opt/frp/frpc.toml
+# 云服务器 frps.toml 的 allowPorts 需包含 { single = 30303 }
+# 云安全组需放行 TCP 30303 + UDP 30303
+
+# BSC P2P TCP
+[[proxies]]
+name = "bsc-30303-tcp"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 30303
+remotePort = 30303
+
+# BSC P2P UDP
+[[proxies]]
+name = "bsc-30303-udp"
+type = "udp"
+localIP = "127.0.0.1"
+localPort = 30303
+remotePort = 30303
+
+# 可选：RPC 穿透（仅自用，勿暴露公网给陌生人）
+# [[proxies]]
+# name = "bsc-rpc"
+# type = "tcp"
+# localIP = "127.0.0.1"
+# localPort = 8545
+# remotePort = 8545

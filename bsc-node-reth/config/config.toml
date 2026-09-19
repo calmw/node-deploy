@@ -1,0 +1,59 @@
+[Eth]
+NetworkId = 56
+TrieTimeout = 150000000000
+
+[Eth.Miner]
+GasCeil = 70000000
+GasPrice = 50000000
+
+[Eth.TxPool]
+Locals = []
+NoLocals = true
+Journal = "transactions.rlp"
+Rejournal = 3600000000000
+PriceLimit = 50000000
+PriceBump = 10
+AccountSlots = 200
+GlobalSlots = 8000
+AccountQueue = 200
+GlobalQueue = 4000
+
+[Eth.GPO]
+Blocks = 20
+Percentile = 60
+OracleThreshold = 1000
+
+[Node]
+IPCPath = "geth.ipc"
+HTTPHost = "localhost"
+InsecureUnlockAllowed = false
+HTTPPort = 8545
+HTTPVirtualHosts = ["localhost"]
+HTTPModules = ["eth", "net", "web3", "txpool", "parlia"]
+WSPort = 8546
+WSModules = ["net", "web3", "eth"]
+
+[Node.P2P]
+MaxPeers = 200
+NoDiscovery = false
+# FRP/NAT 场景：inbound≈0，DialRatio=1 让全部 MaxPeers 槽位都用于主动外连
+DialRatio = 1
+# 对称 NAT 环境下 discovery 不可靠，直接静态连真实全节点（可用滚雪球脚本定期刷新）
+StaticNodes = [
+  "enode://876294d965130c722d8b9e47210fc205f4896fcba3199bc844b9b0195dea9a9a334131095136753386787e4ed25e6eaa32ab05a3675e0a5462961b626f9b2920@64.130.36.212:30303",
+  "enode://2c6c34a91456791d25222db5f1876cbea620e3e0ab3b490af6ca004374a0ccd1844e7592d567e88e3055ca21fdc3fe531014a5f5cd6a0159571b26827ce895d4@23.111.176.6:30311",
+  "enode://ee6760106f2537e4c9305247aa139a3cc4ed85753f83f9b5d1f72062acb1f8cd9fb367f64b3c56d8bc9670cd306cd8545c87f07a612bec4acd1791acf511e944@64.34.94.255:30311",
+  "enode://aec3401e27ead32e462049c8e72bf9499ab45fdfddecfd3903184fe1bd0b020b9dfcf93dcc341d53a0d8d1e7d3d73c8868a098aa3bed0235272d33257218d563@65.108.14.107:30303",
+  "enode://e1e1e63cc5c15179d95e81619d9c2a34bdcecbd2a01452e0dc5b1ad602bf04d3f9823bcf69a4048d156facfd3993618bbcb6b5c4c7ccb4da551e4f5ebd948593@64.31.32.106:30303",
+  "enode://6e6a494ac571fac881c6ad10a53537529b99c6be92eb8105b50193a49faa63df1defeeddbadc002cf7393956e047b069590c70322112790be4e9b96d836ce22e@157.245.223.0:30311",
+  "enode://31cf6dd36f3b33bd30af8e324d32171c5ca54ee6ac4740a44ab4ca228ef5c43f7ed29c4720fd7d0485add1c9588d11b2c20045b6aa04eb99b929805894fef29b@64.130.47.89:30303",
+  "enode://6572f16d1845059081cc3da538ea247813efe0f4daf566bbb978ab1da4bf60d78cc96a7dc37bacc047a4b993c974945b3e6fe5b43f252ffaf74f7a461ce701bf@103.147.152.28:30311",
+]
+ListenAddr = ":30303"
+EnableMsgEvents = false
+
+[Node.LogConfig]
+FilePath = "bsc.log"
+MaxBytesSize = 10485760
+Level = "info"
+FileRoot = ""
