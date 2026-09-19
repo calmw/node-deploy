@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# BSC Reth 主网：reth.toml 一年裁剪 + 可选 Full 快照
+# BSC Reth 主网：reth.toml ~1.5 年裁剪 + 可选 Full 快照
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -31,7 +31,7 @@ for arg in "$@"; do
 done
 
 echo "============================================"
-echo " BSC Reth 主网（custom prune ~1 年 state）"
+echo " BSC Reth 主网（custom prune ~1.5 年 state）"
 echo " 目录: ${ROOT_DIR}"
 echo "============================================"
 

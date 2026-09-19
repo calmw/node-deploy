@@ -30,8 +30,8 @@ usage() {
 完成后: bash scripts/setup.sh && docker compose up -d
 
 快照说明: 官方 Full 快照为 Reth --full 形态导出；导入后靠 reth.toml 的
-distance 在运行中滚动保留约 1 年。快照内更早的历史 state 可能仍不足 1 年，
-节点追块并运行满窗口后，查询范围才稳定为「链头往前 ~365 天」。
+distance 在运行中滚动保留约 1.5 年。快照内更早的历史 state 可能仍不足该窗口，
+节点追块并运行满窗口后，查询范围才稳定为「链头往前 ~548 天」。
 EOF
 }
 

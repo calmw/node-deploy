@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 生成 data/reth/reth.toml（一年 state 裁剪配置）
+# 生成 data/reth/reth.toml（约 1.5 年 state 裁剪配置）
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -29,7 +29,7 @@ calc_distance() {
     echo "${PRUNE_HISTORY_DISTANCE}"
     return
   fi
-  local days="${PRUNE_HISTORY_DAYS:-365}"
+  local days="${PRUNE_HISTORY_DAYS:-548}"
   local bt="${BLOCK_TIME_SEC:-0.45}"
   python3 - "${days}" "${bt}" <<'PY'
 import math, sys

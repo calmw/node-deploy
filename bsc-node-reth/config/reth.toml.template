@@ -1,4 +1,4 @@
-# BSC Reth 自定义裁剪：保留约 1 年历史（由 setup.sh 写入 PRUNE_HISTORY_DISTANCE）
+# BSC Reth 自定义裁剪：保留约 1.5 年历史（由 setup.sh 写入 PRUNE_HISTORY_DISTANCE）
 # 勿使用 --full；首启前必须存在此文件于 datadir。
 # 参考: https://reth.rs/run/configuration/#the-prune-section
 
@@ -6,7 +6,7 @@
 block_interval = 5
 
 [prune.segments]
-# 保留最近 N+1 块；N = PRUNE_HISTORY_DISTANCE（默认 71_000_000 ≈ 365 天 @ 0.45s/块）
+# 保留最近 N+1 块；N = PRUNE_HISTORY_DISTANCE（默认 106_500_000 ≈ 1.5 年 @ 0.45s/块）
 sender_recovery = { distance = __PRUNE_HISTORY_DISTANCE__ }
 transaction_lookup = { distance = __PRUNE_HISTORY_DISTANCE__ }
 receipts = { distance = __PRUNE_HISTORY_DISTANCE__ }

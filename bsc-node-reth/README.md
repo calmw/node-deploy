@@ -1,6 +1,6 @@
-# BSC 主网 Reth 节点（一年 state 裁剪）
+# BSC 主网 Reth 节点（约 1.5 年 state 裁剪）
 
-独立机器运行 **bnb-reth**（`ghcr.io/bnb-chain/bsc-reth`），通过 `reth.toml` **自定义裁剪**，保留约 **365 天**历史 state（按 **0.45s/块** ≈ `PRUNE_HISTORY_DISTANCE=71_000_000`）。
+独立机器运行 **bnb-reth**（`ghcr.io/bnb-chain/bsc-reth`），通过 `reth.toml` **自定义裁剪**，保留约 **548 天（1.5 年）**历史 state（按 **0.45s/块** ≈ `PRUNE_HISTORY_DISTANCE=106_500_000`）。
 
 | 项目 | 值 |
 |------|-----|
@@ -16,17 +16,17 @@
 | 模式 | 历史 state 窗口 |
 |------|-----------------|
 | `reth-bsc node --full` | 约 **10,064** 块（0.45s 下 ~1.3 小时） |
-| **本方案**（`reth.toml` distance） | 约 **71M** 块（~**365 天**） |
+| **本方案**（`reth.toml` distance） | 约 **106.5M** 块（~**1.5 年**） |
 
 **勿**在启动参数里加 `--full`；裁剪规则以 `data/reth/reth.toml` 为准。
 
-### 快照 + 一年窗口（重要）
+### 快照 + 1.5 年窗口（重要）
 
-推荐用 [官方 Reth Full 快照](https://github.com/bnb-chain/bsc-snapshots#source-4-bsc-reth-snapshots) 快速追到链头。该快照由 **Full 节点**导出，库内**更早**的历史 state **不一定**已有 365 天。
+推荐用 [官方 Reth Full 快照](https://github.com/bnb-chain/bsc-snapshots#source-4-bsc-reth-snapshots) 快速追到链头。该快照由 **Full 节点**导出，库内**更早**的历史 state **不一定**已有 1.5 年。
 
-节点追块并稳定运行后，会按 `distance` **滚动保留链头往前约 1 年**；超出窗口的数据会被 prune 掉且**不可恢复**。
+节点追块并稳定运行后，会按 `distance` **滚动保留链头往前约 1.5 年**；超出窗口的数据会被 prune 掉且**不可恢复**。
 
-若必须从创世就保留完整 1 年窗口，只能**不用快照、从 genesis 同步**（耗时长，4TB 需密切监控磁盘）。
+若必须从创世就保留完整 1.5 年窗口，只能**不用快照、从 genesis 同步**（耗时长，4TB 需密切监控磁盘）。
 
 ---
 
@@ -40,6 +40,39 @@
 | `scripts/status.sh` | 容器、磁盘、RPC、同步 |
 | `scripts/reset-data.sh` | 清空 `data/reth/` |
 | `scripts/start.sh` | 容器入口（勿手跑） |
+| `scripts/build-from-source.sh` | 从 GitHub 源码构建本地 `bsc-reth-local` 镜像 |
+
+---
+
+## 从源码构建最新 reth-bsc（推荐）
+
+GHCR 的 `bsc-reth:latest` 可能长期停在旧版（如 1.1.1），主网 Pasteur 等需 **reth-bsc v0.1.x** 时请本地构建：
+
+```bash
+cd bsc-node-reth
+chmod +x scripts/build-from-source.sh
+
+# 构建最新 GitHub Release（默认 v0.1.2 等）并写入 .env
+bash scripts/build-from-source.sh --update-env
+
+# 或指定 tag
+bash scripts/build-from-source.sh --ref v0.1.2 --update-env
+
+# 宿主机 Rust 编译（需 clang、约 30GB 磁盘），再打最小镜像
+bash scripts/build-from-source.sh --ref v0.1.2 --method native --update-env
+
+docker compose down && docker compose up -d
+docker compose exec reth reth-bsc --version
+```
+
+| 选项 | 说明 |
+|------|------|
+| `--ref` | tag/分支，默认自动取 `releases/latest` |
+| `--method docker` | 用上游 `Dockerfile` + `maxperf`（默认） |
+| `--method native` | `make maxperf` 后打 Ubuntu 运行时镜像 |
+| `--update-env` | 设置 `RETH_IMAGE=bsc-reth-local:<ref>` |
+
+源码克隆在 `.build/reth-bsc/`（已 gitignore）。从 GHCR 1.1.x 升到 v0.1.x 前请阅读 [MIGRATE_V2.md](https://github.com/bnb-chain/reth-bsc/blob/main/MIGRATE_V2.md)。
 
 ---
 
@@ -117,7 +150,7 @@ docker compose logs -f --tail 50 reth
 
 | 变量 | 默认 | 说明 |
 |------|------|------|
-| `PRUNE_HISTORY_DISTANCE` | `71000000` | 保留最近 N+1 块相关数据 |
+| `PRUNE_HISTORY_DISTANCE` | `106500000` | 保留最近 N+1 块相关数据 |
 | `PRUNE_HISTORY_DAYS` | （可选） | 与 `BLOCK_TIME_SEC` 由 setup 计算块数 |
 | `BLOCK_TIME_SEC` | `0.45` | 估算窗口天数用 |
 
@@ -136,7 +169,7 @@ docker compose down && docker compose up -d
 
 ## RPC 能力（预期）
 
-在 **1 年窗口内**（且快照/同步已具备对应段数据）：
+在 **1.5 年窗口内**（且快照/同步已具备对应段数据）：
 
 - `eth_getBalance` / `eth_getStorageAt` 带历史 block tag
 - `eth_getLogs`（配置了 `receipts` distance）
@@ -154,7 +187,7 @@ docker compose down && docker compose up -d
 |------|------|
 | 下载 `.tar.zst` | 与压缩包相当（解压后脚本会删包） |
 | 解压后 Full 快照 | ~**3.2TB+** |
-| 运行 + 1 年窗口 | 预留 **300GB~1TB** 余量 |
+| 运行 + 1.5 年窗口 | 预留 **400GB~1.2TB** 余量 |
 
 空间紧张时：快照下载目录与 `data/reth` 可同盘；确保 `df -h` 在解压前 **≥3500GB 可用**。
 
