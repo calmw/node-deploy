@@ -14,6 +14,8 @@
 #   RETH_BSC_REF     覆盖 --ref（tag / branch）
 #   RETH_LOCAL_IMAGE 默认 bsc-reth-local
 #   RETH_REGISTRY    远程仓库前缀（与 --push 合用）
+#   RETH_DOCKER_HUB_MIRROR  Docker Hub 镜像前缀，如 docker.1ms.run（Hub 超时时自动 retag）
+#   RETH_DOCKER_HUB_MIRROR=off  禁用镜像站回退
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -50,6 +52,8 @@ usage() {
 
 注意:
   - Docker 构建约 30–90 分钟，磁盘建议 ≥ 30GB 空闲（含 target 缓存）
+  - Docker Hub 不可达时: export RETH_DOCKER_HUB_MIRROR=docker.1ms.run
+  - 或宿主机编译: --method native（仅需拉一次 ubuntu 基础镜像）
   - 从 GHCR latest (1.1.1) 升到 v0.1.x 可能需 db migrate-v2，见 reth-bsc MIGRATE_V2.md
 EOF
 }
@@ -67,7 +71,113 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-log() { printf '[build-reth] %s\n' "$*"; }
+log() { printf '[build-reth] %s\n' "$*" >&2; }
+
+assert_image_exists() {
+  local tag="$1"
+  if ! docker image inspect "${tag}" >/dev/null 2>&1; then
+    log "错误: 镜像不存在: ${tag}（构建或 push 未成功，已中止）"
+    exit 1
+  fi
+}
+
+# 去掉 Dockerfile 对 docker.io/docker/dockerfile:1.7-labs 的依赖（国内常拉不到），
+# 并用 .dockerignore 替代 COPY --exclude=*
+prepare_docker_build_context() {
+  local ctx="${ROOT_DIR}/.build/docker-build"
+  rm -rf "${ctx}"
+  mkdir -p "${ctx}"
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a --exclude='.git' --exclude='dist' "${SRC_DIR}/" "${ctx}/"
+  else
+    tar -C "${SRC_DIR}" --exclude='.git' --exclude='dist' -cf - . | tar -C "${ctx}" -xf -
+  fi
+  [[ -f "${ctx}/Dockerfile" ]] || { log "构建上下文中无 Dockerfile"; exit 1; }
+  sed -i.bak \
+    -e '1{/^# syntax=/d;}' \
+    -e 's/COPY --exclude=\.git --exclude=dist \. \./COPY . ./g' \
+    -e 's/COPY --exclude=dist \. \./COPY . ./g' \
+    "${ctx}/Dockerfile"
+  rm -f "${ctx}/Dockerfile.bak"
+  cat > "${ctx}/.dockerignore" <<'EOF'
+.git
+dist
+target
+EOF
+  log "已生成无 labs 语法的 Docker 构建上下文: ${ctx}"
+  echo "${ctx}"
+}
+
+# 解析 Dockerfile 的 FROM，经镜像站拉取并 retag 为原名（Build 仍用原 Dockerfile 引用）
+prefetch_dockerfile_base_images() {
+  local dockerfile="$1"
+  python3 - "${dockerfile}" <<'PY'
+import os, re, subprocess, sys
+
+dockerfile = sys.argv[1]
+mirror_cfg = os.environ.get("RETH_DOCKER_HUB_MIRROR", "docker.1ms.run").strip()
+mirrors = []
+if mirror_cfg.lower() not in ("", "off", "none", "false", "0"):
+    mirrors.append(mirror_cfg.rstrip("/"))
+
+def log(msg: str) -> None:
+    print(f"[build-reth] {msg}", file=sys.stderr)
+
+def mirror_candidates(ref: str):
+    out = []
+    for m in mirrors:
+        out.append(f"{m}/{ref}")
+        if "/" not in ref.split("@", 1)[0]:
+            out.append(f"{m}/library/{ref}")
+    # 去重保序
+    seen = set()
+    dedup = []
+    for x in out:
+        if x not in seen:
+            seen.add(x)
+            dedup.append(x)
+    return dedup
+
+def docker_pull(ref: str) -> bool:
+    p = subprocess.run(["docker", "pull", ref], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return p.returncode == 0
+
+def pull_with_fallback(ref: str) -> None:
+    if docker_pull(ref):
+        log(f"已拉取 {ref}")
+        return
+    log(f"直连 Docker Hub 失败: {ref}，尝试镜像站…")
+    for cand in mirror_candidates(ref):
+        if docker_pull(cand):
+            subprocess.run(["docker", "tag", cand, ref], check=True)
+            log(f"✓ 经镜像站拉取并 tag 为 {ref}（来源 {cand}）")
+            return
+    log(f"错误: 无法拉取基础镜像 {ref}")
+    if mirrors:
+        log(f"  已尝试镜像前缀: {mirrors[0]}（可改 RETH_DOCKER_HUB_MIRROR 或设为 off 仅直连 Hub）")
+    else:
+        log("  可设置: export RETH_DOCKER_HUB_MIRROR=docker.1ms.run")
+    sys.exit(1)
+
+stages = set()
+for raw in open(dockerfile):
+    line = raw.strip()
+    if not line.upper().startswith("FROM "):
+        continue
+    m = re.match(r"^FROM\s+(\S+)(?:\s+AS\s+(\S+))?", line, re.I)
+    if not m:
+        continue
+    img, as_name = m.group(1), m.group(2)
+    if img.lower() == "scratch":
+        continue
+    if img not in stages:
+        pull_with_fallback(img)
+    if as_name:
+        stages.add(as_name)
+    elif "/" not in img and "@" not in img and ":" not in img:
+        stages.add(img)
+PY
+}
 
 fetch_latest_release_tag() {
   curl -fsSL "https://api.github.com/repos/bnb-chain/reth-bsc/releases/latest" \
@@ -130,18 +240,26 @@ clone_source() {
 build_docker() {
   local ref="$1"
   local tag="${IMAGE_BASE}:${ref}"
-  [[ -f "${SRC_DIR}/Dockerfile" ]] || { echo "[build-reth] 源码中无 Dockerfile" >&2; exit 1; }
+  [[ -f "${SRC_DIR}/Dockerfile" ]] || { log "源码中无 Dockerfile"; exit 1; }
+  local build_ctx
+  build_ctx="$(prepare_docker_build_context)"
+  prefetch_dockerfile_base_images "${build_ctx}/Dockerfile"
   log "Docker 构建 ${tag}（profile=maxperf，约 30–90 分钟）..."
-  docker build ${NO_CACHE} \
-    -f "${SRC_DIR}/Dockerfile" \
-    --build-arg BUILD_PROFILE=maxperf \
-    --build-arg FEATURES=jemalloc,asm-keccak \
-    --build-arg RUSTFLAGS=-C target-cpu=native \
-    -t "${tag}" \
-    "${SRC_DIR}"
+  # RUSTFLAGS 必须加引号，否则 -C 会被 docker 当成 CLI 选项，导致缺少 build context
+  local -a build_cmd=(docker build)
+  [[ -n "${NO_CACHE}" ]] && build_cmd+=("${NO_CACHE}")
+  build_cmd+=(
+    -f "${build_ctx}/Dockerfile"
+    --build-arg BUILD_PROFILE=maxperf
+    --build-arg FEATURES=jemalloc,asm-keccak
+    --build-arg "RUSTFLAGS=-C target-cpu=native"
+    -t "${tag}"
+    "${build_ctx}"
+  )
+  "${build_cmd[@]}"
+  assert_image_exists "${tag}"
   docker tag "${tag}" "${IMAGE_BASE}:latest"
   log "✓ 镜像: ${tag} 与 ${IMAGE_BASE}:latest"
-  echo "${tag}"
 }
 
 build_native() {
@@ -167,23 +285,37 @@ COPY reth-bsc /usr/local/bin/reth-bsc
 RUN ln -sf /usr/local/bin/reth-bsc /usr/local/bin/bsc-reth
 WORKDIR /data
 DOCKERFILE
+  prefetch_dockerfile_base_images "${ctx}/Dockerfile"
   log "打包最小运行时镜像 ${tag}..."
-  docker build ${NO_CACHE} -t "${tag}" "${ctx}"
+  local -a build_cmd=(docker build)
+  [[ -n "${NO_CACHE}" ]] && build_cmd+=("${NO_CACHE}")
+  build_cmd+=(-t "${tag}" "${ctx}")
+  "${build_cmd[@]}"
+  assert_image_exists "${tag}"
   docker tag "${tag}" "${IMAGE_BASE}:latest"
   log "✓ 镜像: ${tag}"
-  echo "${tag}"
 }
 
 update_env() {
   local tag="$1"
   local env_file="${ROOT_DIR}/.env"
   [[ -f "${env_file}" ]] || cp "${ROOT_DIR}/.env.example" "${env_file}"
-  if grep -q '^RETH_IMAGE=' "${env_file}"; then
-    sed -i.bak "s|^RETH_IMAGE=.*|RETH_IMAGE=${tag}|" "${env_file}"
-    rm -f "${env_file}.bak"
-  else
-    echo "RETH_IMAGE=${tag}" >> "${env_file}"
-  fi
+  # 避免 tag 含 / 时 sed 误解析；用 python 写入更稳
+  python3 - "${env_file}" "${tag}" <<'PY'
+import sys
+path, tag = sys.argv[1], sys.argv[2]
+lines = open(path).read().splitlines()
+out, found = [], False
+for line in lines:
+    if line.startswith("RETH_IMAGE="):
+        out.append("RETH_IMAGE=" + tag)
+        found = True
+    else:
+        out.append(line)
+if not found:
+    out.append("RETH_IMAGE=" + tag)
+open(path, "w").write("\n".join(out) + "\n")
+PY
   if grep -q '^RETH_COMPOSE_PULL=' "${env_file}"; then
     sed -i.bak 's/^RETH_COMPOSE_PULL=.*/RETH_COMPOSE_PULL=false/' "${env_file}"
     rm -f "${env_file}.bak"
@@ -199,14 +331,15 @@ push_remote() {
   [[ -n "${REGISTRY}" ]] || { echo "[build-reth] --push 需要 --registry 或 RETH_REGISTRY" >&2; exit 1; }
   local remote_ref="${REGISTRY}:${ref}"
   local remote_latest="${REGISTRY}:latest"
+  assert_image_exists "${local_tag}"
   docker tag "${local_tag}" "${remote_ref}"
   docker tag "${local_tag}" "${remote_latest}"
   log "推送 ${remote_ref} ..."
-  docker push "${remote_ref}"
+  docker push "${remote_ref}" >&2
   log "推送 ${remote_latest} ..."
-  docker push "${remote_latest}"
+  docker push "${remote_latest}" >&2
+  assert_image_exists "${remote_ref}"
   log "✓ 已上传 ${remote_ref}"
-  echo "${remote_ref}"
 }
 
 main() {
@@ -216,19 +349,21 @@ main() {
   log "目标版本: ${ref} | 方式: ${METHOD}"
   clone_source "${ref}"
 
-  local image_tag
+  local image_tag="${IMAGE_BASE}:${ref}"
   case "${METHOD}" in
-    docker) image_tag="$(build_docker "${ref}")" ;;
-    native) image_tag="$(build_native "${ref}")" ;;
+    docker) build_docker "${ref}" ;;
+    native) build_native "${ref}" ;;
     *)
       echo "[build-reth] 未知 --method: ${METHOD}" >&2
       exit 1
       ;;
   esac
+  assert_image_exists "${image_tag}"
 
   local final_tag="${image_tag}"
   if ${DO_PUSH}; then
-    final_tag="$(push_remote "${ref}" "${image_tag}")"
+    push_remote "${ref}" "${image_tag}"
+    final_tag="${REGISTRY}:${ref}"
   fi
 
   if ${UPDATE_ENV}; then

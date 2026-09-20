@@ -98,6 +98,29 @@ bash scripts/build-from-source.sh \
 bash scripts/publish-image.sh ghcr.io/you/bsc-reth v0.1.2
 ```
 
+**Docker Hub 超时（国内常见）**：构建脚本会经 **镜像站拉取并 retag**（默认 `docker.1ms.run`，可改）：
+
+```bash
+export RETH_DOCKER_HUB_MIRROR=docker.1ms.run   # 设为 off 则只直连 Hub
+bash scripts/publish-image.sh ghcr.io/<你>/bsc-reth v0.1.2
+```
+
+手动验证：
+
+```bash
+docker pull docker.1ms.run/lukemathwalker/cargo-chef:latest-rust-1
+docker tag docker.1ms.run/lukemathwalker/cargo-chef:latest-rust-1 lukemathwalker/cargo-chef:latest-rust-1
+```
+
+若仍失败，可用 **宿主机 Rust 编译**（不依赖 cargo-chef 镜像）：`bash scripts/build-from-source.sh --method native --ref v0.1.2 --push ...`（需安装 rust/clang，编译更久）。失败时脚本会 **直接退出**，不会误写 `.env`。
+
+若曾失败导致 `.env` 里 `RETH_IMAGE` 被写成 `The push refers to...`，改回例如：
+
+```bash
+RETH_IMAGE=ghcr.io/<你>/bsc-reth:v0.1.2
+RETH_COMPOSE_PULL=false
+```
+
 ---
 
 ## 日常操作
