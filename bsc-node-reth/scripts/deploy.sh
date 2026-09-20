@@ -87,7 +87,7 @@ if command -v tailscale &>/dev/null; then
   fi
 fi
 # shellcheck disable=SC1091
-source .env
+source "${ROOT_DIR}/scripts/load-env.sh"
 
 if ${USE_SNAPSHOT}; then
   if grep -q '^RETH_SYNC_MODE=' .env; then
@@ -95,9 +95,8 @@ if ${USE_SNAPSHOT}; then
   else
     echo "RETH_SYNC_MODE=snapshot" >> .env
   fi
-  # shellcheck disable=SC1091
-  source .env
 fi
+load_dotenv "${ROOT_DIR}/.env"
 
 SYNC="${RETH_SYNC_MODE:-genesis}"
 has_reth_data() {

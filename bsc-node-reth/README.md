@@ -114,12 +114,17 @@ docker tag docker.1ms.run/lukemathwalker/cargo-chef:latest-rust-1 lukemathwalker
 
 若仍失败，可用 **宿主机 Rust 编译**（不依赖 cargo-chef 镜像）：`bash scripts/build-from-source.sh --method native --ref v0.1.2 --push ...`（需安装 rust/clang，编译更久）。失败时脚本会 **直接退出**，不会误写 `.env`。
 
-若曾失败导致 `.env` 里 `RETH_IMAGE` 被写成 `The push refers to...`，改回例如：
+若曾失败导致 `.env` 混入 `The push refers to...` 等行（`source .env` 会报 `push: command not found`）：
 
 ```bash
+bash scripts/repair-env.sh
+# 再手动确认:
+grep -E '^RETH_IMAGE=|^RETH_REGISTRY=' .env
 RETH_IMAGE=ghcr.io/<你>/bsc-reth:v0.1.2
 RETH_COMPOSE_PULL=false
 ```
+
+**GitHub clone TLS 失败**：脚本会自动重试；仍失败时可换网络/代理，或 `export RETH_BSC_REPO=https://gitclone.com/github.com/bnb-chain/reth-bsc.git`（以你环境可用的镜像为准）。
 
 ---
 

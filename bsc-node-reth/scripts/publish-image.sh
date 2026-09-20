@@ -5,7 +5,8 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${ROOT_DIR}"
 
 # shellcheck disable=SC1091
-[[ -f .env ]] && source .env || true
+source "${ROOT_DIR}/scripts/load-env.sh"
+load_dotenv "${ROOT_DIR}/.env"
 
 REGISTRY="${1:-${RETH_REGISTRY:-}}"
 REF="${2:-${RETH_BSC_REF:-}}"

@@ -16,6 +16,7 @@
 #   RETH_REGISTRY    远程仓库前缀（与 --push 合用）
 #   RETH_DOCKER_HUB_MIRROR  Docker Hub 镜像前缀，如 docker.1ms.run（Hub 超时时自动 retag）
 #   RETH_DOCKER_HUB_MIRROR=off  禁用镜像站回退
+#   RETH_GIT_RETRY / RETH_GIT_RETRY_SLEEP  git 网络抖动时重试（默认 5 次 / 10s）
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -72,6 +73,30 @@ while [[ $# -gt 0 ]]; do
 done
 
 log() { printf '[build-reth] %s\n' "$*" >&2; }
+
+retry_git() {
+  local max="${RETH_GIT_RETRY:-5}"
+  local sleep_sec="${RETH_GIT_RETRY_SLEEP:-10}"
+  local attempt=1
+  while (( attempt <= max )); do
+    if "$@"; then
+      return 0
+    fi
+    log "git 失败 (${attempt}/${max}): $*"
+    if (( attempt < max )); then
+      sleep "${sleep_sec}"
+    fi
+    (( attempt++ )) || true
+  done
+  return 1
+}
+
+run_git() {
+  retry_git "$@" || {
+    log "错误: git 多次失败（TLS/网络）。可稍后重试，或 export RETH_BSC_REPO=<GitHub 镜像 URL>"
+    exit 1
+  }
+}
 
 assert_image_exists() {
   local tag="$1"
@@ -219,19 +244,23 @@ clone_source() {
   mkdir -p "${ROOT_DIR}/.build"
   if [[ -d "${SRC_DIR}/.git" ]]; then
     log "更新源码 ${SRC_DIR} → ${ref}"
-    git -C "${SRC_DIR}" fetch --depth 1 origin "refs/tags/${ref}:refs/tags/${ref}" 2>/dev/null \
-      || git -C "${SRC_DIR}" fetch --depth 1 origin "${ref}"
-    git -C "${SRC_DIR}" checkout -f "${ref}"
-    git -C "${SRC_DIR}" reset --hard "FETCH_HEAD" 2>/dev/null || git -C "${SRC_DIR}" reset --hard "${ref}"
+    if ! retry_git git -C "${SRC_DIR}" fetch --depth 1 origin "refs/tags/${ref}:refs/tags/${ref}" 2>/dev/null; then
+      run_git git -C "${SRC_DIR}" fetch --depth 1 origin "${ref}"
+    fi
+    run_git git -C "${SRC_DIR}" checkout -f "${ref}"
+    if ! retry_git git -C "${SRC_DIR}" reset --hard "FETCH_HEAD" 2>/dev/null; then
+      run_git git -C "${SRC_DIR}" reset --hard "${ref}"
+    fi
   else
     log "克隆 ${REPO} (${ref})"
     rm -rf "${SRC_DIR}"
-    if git ls-remote --exit-code --tags "${REPO}" "refs/tags/${ref}" &>/dev/null; then
-      git clone --depth 1 --branch "${ref}" "${REPO}" "${SRC_DIR}"
+    if retry_git git ls-remote --exit-code --tags "${REPO}" "refs/tags/${ref}" &>/dev/null; then
+      run_git git clone --depth 1 --branch "${ref}" "${REPO}" "${SRC_DIR}"
+    elif retry_git git clone --depth 1 --branch "${ref}" "${REPO}" "${SRC_DIR}" 2>/dev/null; then
+      :
     else
-      git clone --depth 1 --branch "${ref}" "${REPO}" "${SRC_DIR}" \
-        || git clone --depth 1 "${REPO}" "${SRC_DIR}"
-      git -C "${SRC_DIR}" checkout -f "${ref}"
+      run_git git clone --depth 1 "${REPO}" "${SRC_DIR}"
+      run_git git -C "${SRC_DIR}" checkout -f "${ref}"
     fi
   fi
   log "当前源码: $(git -C "${SRC_DIR}" describe --tags --always 2>/dev/null || git -C "${SRC_DIR}" rev-parse --short HEAD)"

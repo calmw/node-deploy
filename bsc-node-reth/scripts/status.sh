@@ -6,7 +6,8 @@ cd "${ROOT_DIR}"
 CONTAINER="${RETH_CONTAINER:-bsc-node-reth}"
 
 # shellcheck disable=SC1091
-[[ -f .env ]] && source .env || true
+source "${ROOT_DIR}/scripts/load-env.sh"
+load_dotenv "${ROOT_DIR}/.env"
 HTTP_PORT="${HTTP_PORT:-8545}"
 HTTP_BIND="${HTTP_BIND_ADDR:-127.0.0.1}"
 P2P_PORT="${P2P_PORT:-30303}"
