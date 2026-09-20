@@ -6,12 +6,14 @@
 #   bash scripts/build-from-source.sh --ref v0.1.2
 #   bash scripts/build-from-source.sh --method native
 #   bash scripts/build-from-source.sh --update-env         # 写入 .env 的 RETH_IMAGE
+#   bash scripts/build-from-source.sh --push --registry ghcr.io/you/bsc-reth
 #   bash scripts/build-from-source.sh --no-cache
 #
 # 环境变量:
 #   RETH_BSC_REPO    默认 https://github.com/bnb-chain/reth-bsc.git
 #   RETH_BSC_REF     覆盖 --ref（tag / branch）
 #   RETH_LOCAL_IMAGE 默认 bsc-reth-local
+#   RETH_REGISTRY    远程仓库前缀（与 --push 合用）
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -21,6 +23,8 @@ IMAGE_BASE="${RETH_LOCAL_IMAGE:-bsc-reth-local}"
 METHOD=docker
 REF=""
 UPDATE_ENV=false
+DO_PUSH=false
+REGISTRY="${RETH_REGISTRY:-}"
 NO_CACHE=""
 
 usage() {
@@ -34,11 +38,14 @@ usage() {
   --method docker      使用仓库 Dockerfile 构建镜像（默认，推荐）
   --method native      宿主机 cargo maxperf，再打最小运行时镜像
   --update-env         构建成功后设置 .env 中 RETH_IMAGE=<镜像>:<ref>
+  --push               构建后 push 到 --registry / RETH_REGISTRY
+  --registry <name>    远程镜像名，如 ghcr.io/org/bsc-reth
   --no-cache           docker build 不使用缓存
   -h, --help
 
 示例:
   bash scripts/build-from-source.sh --ref v0.1.2 --update-env
+  bash scripts/build-from-source.sh --push --registry ghcr.io/you/bsc-reth --update-env
   docker compose down && docker compose up -d
 
 注意:
@@ -52,6 +59,8 @@ while [[ $# -gt 0 ]]; do
     --ref) REF="$2"; shift 2 ;;
     --method) METHOD="$2"; shift 2 ;;
     --update-env) UPDATE_ENV=true; shift ;;
+    --push) DO_PUSH=true; shift ;;
+    --registry) REGISTRY="$2"; shift 2 ;;
     --no-cache) NO_CACHE="--no-cache"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "未知参数: $1" >&2; usage; exit 1 ;;
@@ -175,7 +184,29 @@ update_env() {
   else
     echo "RETH_IMAGE=${tag}" >> "${env_file}"
   fi
+  if grep -q '^RETH_COMPOSE_PULL=' "${env_file}"; then
+    sed -i.bak 's/^RETH_COMPOSE_PULL=.*/RETH_COMPOSE_PULL=false/' "${env_file}"
+    rm -f "${env_file}.bak"
+  else
+    echo "RETH_COMPOSE_PULL=false" >> "${env_file}"
+  fi
   log "已写入 ${env_file}: RETH_IMAGE=${tag}"
+}
+
+push_remote() {
+  local ref="$1"
+  local local_tag="$2"
+  [[ -n "${REGISTRY}" ]] || { echo "[build-reth] --push 需要 --registry 或 RETH_REGISTRY" >&2; exit 1; }
+  local remote_ref="${REGISTRY}:${ref}"
+  local remote_latest="${REGISTRY}:latest"
+  docker tag "${local_tag}" "${remote_ref}"
+  docker tag "${local_tag}" "${remote_latest}"
+  log "推送 ${remote_ref} ..."
+  docker push "${remote_ref}"
+  log "推送 ${remote_latest} ..."
+  docker push "${remote_latest}"
+  log "✓ 已上传 ${remote_ref}"
+  echo "${remote_ref}"
 }
 
 main() {
@@ -195,11 +226,16 @@ main() {
       ;;
   esac
 
+  local final_tag="${image_tag}"
+  if ${DO_PUSH}; then
+    final_tag="$(push_remote "${ref}" "${image_tag}")"
+  fi
+
   if ${UPDATE_ENV}; then
-    update_env "${image_tag}"
+    update_env "${final_tag}"
   else
     echo ""
-    log "下一步: 在 .env 中设置 RETH_IMAGE=${image_tag}"
+    log "下一步: 在 .env 中设置 RETH_IMAGE=${final_tag}"
     log "  docker compose down && docker compose up -d"
   fi
 }

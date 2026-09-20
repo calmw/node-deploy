@@ -1,6 +1,6 @@
 services:
   reth:
-    image: ${RETH_IMAGE:-ghcr.io/bnb-chain/bsc-reth:latest}
+    image: ${RETH_IMAGE:-bsc-reth-local:latest}
     container_name: bsc-node-reth
     restart: unless-stopped
     network_mode: host
@@ -10,6 +10,7 @@ services:
       - ./data/reth:/data
       - ./scripts/start.sh:/bsc/scripts/start.sh:ro
     entrypoint: ["/bin/bash", "/bsc/scripts/start.sh"]
+    pull_policy: if_not_present
     logging:
       driver: json-file
       options:
