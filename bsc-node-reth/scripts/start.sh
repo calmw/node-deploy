@@ -21,35 +21,44 @@ merge_trusted_peers() {
   local base="$1"
   local file="/bsc/config/trusted-peers.txt"
   [[ -f "${file}" ]] || file="${ROOT_DIR}/config/trusted-peers.txt"
-  python3 - "$base" "$file" <<'PY'
-import sys
-from pathlib import Path
 
-def split_enodes(s: str) -> list[str]:
-    out = []
-    for part in s.replace("\n", ",").split(","):
-        p = part.strip()
-        if p.startswith("enode://"):
-            out.append(p)
-    return out
+  local -a merged=()
 
-base = split_enodes(sys.argv[1])
-extra = []
-path = Path(sys.argv[2])
-if path.is_file():
-    for line in path.read_text().splitlines():
-        s = line.strip()
-        if not s or s.startswith("#"):
-            continue
-        extra.extend(split_enodes(s))
-seen = set()
-merged = []
-for e in base + extra:
-    if e not in seen:
-        seen.add(e)
-        merged.append(e)
-print(",".join(merged))
-PY
+  _merged_has() {
+    local needle="$1" x
+    for x in "${merged[@]}"; do
+      [[ "${x}" == "${needle}" ]] && return 0
+    done
+    return 1
+  }
+
+  _append_enodes() {
+    local s="${1//$'\n'/,}"
+    local part p old_ifs="${IFS}"
+    IFS=','
+    for part in ${s}; do
+      p="${part#"${part%%[![:space:]]*}"}"
+      p="${p%"${p##*[![:space:]]}"}"
+      [[ "${p}" == enode://* ]] || continue
+      _merged_has "${p}" && continue
+      merged+=("${p}")
+    done
+    IFS="${old_ifs}"
+  }
+
+  _append_enodes "${base}"
+  if [[ -f "${file}" ]]; then
+    while IFS= read -r line || [[ -n "${line}" ]]; do
+      line="${line%%#*}"
+      line="${line#"${line%%[![:space:]]*}"}"
+      line="${line%"${line##*[![:space:]]}"}"
+      [[ -n "${line}" ]] || continue
+      _append_enodes "${line}"
+    done < "${file}"
+  fi
+
+  local IFS=','
+  echo "${merged[*]}"
 }
 
 TRUSTED="${RETH_TRUSTED_PEERS:-${DEFAULT_TRUSTED_PEERS}}"
