@@ -9,6 +9,7 @@ services:
     volumes:
       - ./data/reth:/data
       - ./scripts/start.sh:/bsc/scripts/start.sh:ro
+      - ./config/trusted-peers.txt:/bsc/config/trusted-peers.txt:ro
     entrypoint: ["/bin/bash", "/bsc/scripts/start.sh"]
     pull_policy: if_not_present
     logging:

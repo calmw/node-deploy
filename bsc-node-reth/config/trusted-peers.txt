@@ -1,0 +1,4 @@
+# 额外 trusted peer（每行一个 enode，或逗号分隔）
+# 由 scripts/refresh-trusted-peers.sh 追加；start.sh 启动时与官方 4 个合并去重
+# 例:
+# enode://...@1.2.3.4:30311

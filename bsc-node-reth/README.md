@@ -139,6 +139,29 @@ RETH_COMPOSE_PULL=false
 
 ---
 
+## 持久化可用 Peer
+
+| 方式 | 说明 |
+|------|------|
+| **自动** | `data/reth/known-peers.json`（discv 发现，重启保留；随 `data/reth` 备份） |
+| **优先连接** | `--trusted-peers`：内置 4 个 BSC 官方 enode + `config/trusted-peers.txt` |
+| **整表覆盖** | `.env` 里 `RETH_TRUSTED_PEERS=enode://...,enode://...`（逗号分隔，优先级最高） |
+
+同步一段时间后，把当前连上的 good peer 写入 trusted 列表：
+
+```bash
+# 需 HTTP_API 含 admin；RPC 地址为 .env 的 HTTP_BIND_ADDR:HTTP_PORT
+bash scripts/refresh-trusted-peers.sh
+RESTART=1 bash scripts/refresh-trusted-peers.sh   # 写入后重启
+
+# 查看
+grep -v '^#' config/trusted-peers.txt
+```
+
+手动追加：编辑 `config/trusted-peers.txt`（每行一个 `enode://...`），然后 `docker compose restart reth`。
+
+---
+
 ## 日常操作
 
 ```bash
