@@ -41,7 +41,7 @@ PY
 write_reth_toml() {
   local dist
   dist="$(calc_distance)"
-  mkdir -p "${DATA_RETH}/logs"
+  mkdir -p "${DATA_RETH}"
   if [[ ! -f "${TEMPLATE}" ]]; then
     echo "[setup] 缺少 ${TEMPLATE}" >&2
     exit 1

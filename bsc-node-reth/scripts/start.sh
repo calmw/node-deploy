@@ -52,12 +52,19 @@ ARGS=(
   --ws.port "${WS_PORT:-8546}"
   --ws.api "${WS_API}"
   --metrics "127.0.0.1:${METRICS_PORT:-6060}"
-  --log.file.directory "${DATADIR}/logs"
 )
+
+# 默认不写文件日志，由 Docker 收集 stdout/stderr（docker compose logs）
+if [[ -n "${RETH_LOG_FILE_DIR:-}" ]]; then
+  ARGS+=(--log.file.directory "${RETH_LOG_FILE_DIR}")
+  echo "[reth] 文件日志: ${RETH_LOG_FILE_DIR}"
+else
+  echo "[reth] 日志仅控制台 → docker compose logs"
+fi
 
 if [[ "${RETH_DEBUG:-false}" == "true" ]] || [[ "${RETH_DEBUG:-}" == "1" ]]; then
   export RUST_LOG="${RUST_LOG:-info,reth=debug,reth_bsc=debug}"
-  ARGS+=(--log.file.verbosity "${RETH_LOG_VERBOSITY:-debug}")
+  # v0.1.x 无 --log.file.verbosity；文件日志级别随 RUST_LOG / 默认行为
   echo "[reth] debug 已开启: RUST_LOG=${RUST_LOG}"
 fi
 
