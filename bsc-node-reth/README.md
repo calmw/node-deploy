@@ -60,6 +60,17 @@ bash scripts/deploy.sh --build --ref v0.1.2
 
 **另一台机器** 仅运行节点时：复制 `.env`，`RETH_IMAGE=ghcr.io/<你>/bsc-reth:v0.1.2`，`docker compose up -d`（需已 `docker pull`）。
 
+**部署目录不是 git 仓库**（`git pull` 报 `not a git repository`）时，在目录内更新脚本：
+
+```bash
+cd /data2/bsc-node-reth
+bash scripts/sync-from-github.sh   # 需能访问 GitHub；不覆盖 data/、.env
+```
+
+或一次性克隆后在该路径部署：`git clone https://github.com/calmw/node-deploy.git && cd node-deploy/bsc-node-reth`。
+
+**长时间构建**：`cargo-chef` / 编译阶段可能 **数小时**，请用 `tmux`/`screen`，勿只依赖易断开的 SSH。
+
 ---
 
 ## 环境变量要点（`.env`）

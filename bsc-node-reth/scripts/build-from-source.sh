@@ -164,7 +164,9 @@ def mirror_candidates(ref: str):
     return dedup
 
 def docker_pull(ref: str) -> bool:
-    p = subprocess.run(["docker", "pull", ref], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    log(f"docker pull {ref} …（基础镜像较大，请保持 SSH 不断开，可用 tmux）")
+    # 保留 docker 进度输出，避免长时间无日志被误认为卡死
+    p = subprocess.run(["docker", "pull", ref])
     return p.returncode == 0
 
 def pull_with_fallback(ref: str) -> None:

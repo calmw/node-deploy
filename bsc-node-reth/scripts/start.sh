@@ -43,8 +43,6 @@ ARGS=(
   --max-peers "${MAX_PEERS:-100}"
   "${NAT_ARGS[@]}"
   --trusted-peers "${TRUSTED}"
-  --enable-prefetch
-  --optimize.enable-execution-cache
   --http
   --http.addr "${HTTP_BIND_ADDR}"
   --http.port "${HTTP_PORT:-8545}"
@@ -61,6 +59,14 @@ if [[ "${RETH_DEBUG:-false}" == "true" ]] || [[ "${RETH_DEBUG:-}" == "1" ]]; the
   export RUST_LOG="${RUST_LOG:-info,reth=debug,reth_bsc=debug}"
   ARGS+=(--log.file.verbosity "${RETH_LOG_VERBOSITY:-debug}")
   echo "[reth] debug 已开启: RUST_LOG=${RUST_LOG}"
+fi
+
+# 新版 reth-bsc 可选优化项（v0.1.2 无 --enable-prefetch 等，勿默认开启）
+if [[ -n "${RETH_NODE_EXTRA_ARGS:-}" ]]; then
+  # shellcheck disable=SC2206
+  EXTRA=( ${RETH_NODE_EXTRA_ARGS} )
+  ARGS+=("${EXTRA[@]}")
+  echo "[reth] RETH_NODE_EXTRA_ARGS=${RETH_NODE_EXTRA_ARGS}"
 fi
 
 if [[ -d "${DATADIR}/db" ]]; then
