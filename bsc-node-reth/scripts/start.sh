@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# BSC Reth：custom prune（1.5 年）+ 可选 debug；勿使用 --full
+# BSC Reth：custom prune（静态 18 个月 / state 17 个月）+ 可选 debug；勿使用 --full
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -22,12 +22,15 @@ merge_trusted_peers() {
   local file="/bsc/config/trusted-peers.txt"
   [[ -f "${file}" ]] || file="${ROOT_DIR}/config/trusted-peers.txt"
 
+  # 单个命令行参数上限约 128KB，一个 enode 约 150 字符
+  local max="${RETH_TRUSTED_PEERS_MAX:-64}"
   local -a merged=()
 
+  # 按节点 ID（enode:// 与 @ 之间的公钥）去重
   _merged_has() {
-    local needle="$1" x
+    local needle="${1%%@*}" x
     for x in "${merged[@]}"; do
-      [[ "${x}" == "${needle}" ]] && return 0
+      [[ "${x%%@*}" == "${needle}" ]] && return 0
     done
     return 1
   }
@@ -40,6 +43,7 @@ merge_trusted_peers() {
       p="${part#"${part%%[![:space:]]*}"}"
       p="${p%"${p##*[![:space:]]}"}"
       [[ "${p}" == enode://* ]] || continue
+      (( ${#merged[@]} < max )) || break
       _merged_has "${p}" && continue
       merged+=("${p}")
     done
@@ -53,10 +57,14 @@ merge_trusted_peers() {
       line="${line#"${line%%[![:space:]]*}"}"
       line="${line%"${line##*[![:space:]]}"}"
       [[ -n "${line}" ]] || continue
+      (( ${#merged[@]} < max )) || break
       _append_enodes "${line}"
     done < "${file}"
   fi
 
+  if (( ${#merged[@]} >= max )); then
+    echo "[reth] trusted peers 已达上限 ${max}（RETH_TRUSTED_PEERS_MAX），其余忽略" >&2
+  fi
   local IFS=','
   echo "${merged[*]}"
 }
@@ -130,7 +138,7 @@ else
 fi
 
 echo "[reth] custom prune: ${CONFIG} | p2p=${P2P_PORT:-30303} | rpc=${HTTP_BIND_ADDR}:${HTTP_PORT:-8545}"
-echo "[reth] 未使用 --full；1.5 年窗口见 reth.toml distance"
+echo "[reth] 未使用 --full；裁剪窗口见 reth.toml distance（静态 18 个月 / state 17 个月）"
 
 if command -v bsc-reth >/dev/null 2>&1; then
   exec bsc-reth "${ARGS[@]}"

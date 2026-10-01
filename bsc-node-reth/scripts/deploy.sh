@@ -20,7 +20,7 @@ usage() {
 
 默认（.env RETH_SYNC_MODE=genesis）:
   · 不下载快照，空 datadir 从 block 0 同步
-  · 1.5 年 state 见 data/reth/reth.toml
+  · 裁剪：静态数据 18 个月 / state 17 个月，见 data/reth/reth.toml
   · debug RPC 见 RETH_DEBUG
 
 选项:
@@ -52,7 +52,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "============================================"
-echo " BSC Reth 部署（1.5 年裁剪 + debug）"
+echo " BSC Reth 部署（静态 18 个月 / state 17 个月裁剪 + debug）"
 echo " 目录: ${ROOT_DIR}"
 echo "============================================"
 

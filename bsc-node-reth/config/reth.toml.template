@@ -1,4 +1,7 @@
-# BSC Reth 自定义裁剪：保留约 1.5 年历史（由 setup.sh 写入 PRUNE_HISTORY_DISTANCE）
+# BSC Reth 自定义裁剪（由 setup.sh 渲染，勿手改 data/reth/reth.toml）
+#   静态数据（交易 / 回执 / 交易哈希索引 / sender）: 最近 18 个月
+#   state 历史（账户 / 存储历史）:                   最近 17 个月
+# 距离按 BSC 当前出块间隔 0.45s（Fermi 硬分叉后）换算为块数。
 # 勿使用 --full；首启前必须存在此文件于 datadir。
 # 参考: https://reth.rs/run/configuration/#the-prune-section
 
@@ -6,10 +9,13 @@
 block_interval = 5
 
 [prune.segments]
-# 保留最近 N+1 块；N = PRUNE_HISTORY_DISTANCE（默认 106_500_000 ≈ 1.5 年 @ 0.45s/块）
-sender_recovery = { distance = __PRUNE_HISTORY_DISTANCE__ }
-transaction_lookup = { distance = __PRUNE_HISTORY_DISTANCE__ }
-receipts = { distance = __PRUNE_HISTORY_DISTANCE__ }
-account_history = { distance = __PRUNE_HISTORY_DISTANCE__ }
-storage_history = { distance = __PRUNE_HISTORY_DISTANCE__ }
-bodies_history = { distance = __PRUNE_HISTORY_DISTANCE__ }
+# 保留最近 N+1 块
+# 静态数据：N = PRUNE_STATIC_HISTORY_DISTANCE（默认 105_192_000 ≈ 18 个月 @ 0.45s/块）
+bodies_history = { distance = __PRUNE_STATIC_DISTANCE__ }
+receipts = { distance = __PRUNE_STATIC_DISTANCE__ }
+transaction_lookup = { distance = __PRUNE_STATIC_DISTANCE__ }
+sender_recovery = { distance = __PRUNE_STATIC_DISTANCE__ }
+
+# state 历史：N = PRUNE_STATE_HISTORY_DISTANCE（默认 99_348_000 ≈ 17 个月 @ 0.45s/块）
+account_history = { distance = __PRUNE_STATE_DISTANCE__ }
+storage_history = { distance = __PRUNE_STATE_DISTANCE__ }
