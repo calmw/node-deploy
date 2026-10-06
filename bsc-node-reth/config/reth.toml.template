@@ -19,3 +19,12 @@ sender_recovery = { distance = __PRUNE_STATIC_DISTANCE__ }
 # state 历史：N = PRUNE_STATE_HISTORY_DISTANCE（默认 99_348_000 ≈ 17 个月 @ 0.45s/块）
 account_history = { distance = __PRUNE_STATE_DISTANCE__ }
 storage_history = { distance = __PRUNE_STATE_DISTANCE__ }
+
+# 仅影响 pipeline 批量追块（创世同步 / 长时间落后）；追上链头后逐块执行不受影响。
+# 加大单批 state 变更数以减少提交次数（默认 max_changes=5_000_000、max_cumulative_gas=1.5T），
+# 代价是攒批期间多占几 GB 内存。
+[stages.execution]
+max_blocks = 500000
+max_changes = 20000000
+max_cumulative_gas = 6000000000000
+max_duration = "10m"
