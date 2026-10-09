@@ -20,3 +20,7 @@ services:
     mem_limit: ${MEM_LIMIT:-32g}
     memswap_limit: ${MEMSWAP_LIMIT:-48g}
     mem_reservation: ${MEM_RESERVATION:-16g}
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
