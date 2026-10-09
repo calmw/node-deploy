@@ -65,7 +65,7 @@ write_reth_toml() {
       "${TEMPLATE}" > "${OUT}"
   chmod 644 "${OUT}"
   echo "[setup] 已写入 ${OUT} @ ${BLOCK_TIME_SEC}s/块"
-  echo "[setup]   静态数据（交易/回执/索引/sender）distance=${static_dist}（约 $(blocks_to_days "${static_dist}") 天）"
+  echo "[setup]   静态数据（交易/回执/索引）     distance=${static_dist}（约 $(blocks_to_days "${static_dist}") 天），sender=full"
   echo "[setup]   state 历史（账户/存储）        distance=${state_dist}（约 $(blocks_to_days "${state_dist}") 天）"
 }
 
