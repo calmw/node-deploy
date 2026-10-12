@@ -29,3 +29,9 @@ max_blocks = 500000
 max_changes = 20000000
 max_cumulative_gas = 6000000000000
 max_duration = "10m"
+
+# 落后不超过 rebuild_threshold 块时增量更新状态树，否则清空重建（BSC 全量重建约 6 小时）。
+# 默认 100000 会让快照恢复后的每一轮追块都全量重建；只能在状态树完整时调整，重建中途改小会算出错误的状态根。
+[stages.merkle]
+incremental_threshold = 7000
+rebuild_threshold = 300000
