@@ -22,12 +22,12 @@ account_history = { distance = __PRUNE_STATE_DISTANCE__ }
 storage_history = { distance = __PRUNE_STATE_DISTANCE__ }
 
 # 仅影响 pipeline 批量追块（创世同步 / 长时间落后）；追上链头后逐块执行不受影响。
-# 加大单批 state 变更数以减少提交次数（默认 max_changes=5_000_000、max_cumulative_gas=1.5T），
-# 代价是攒批期间多占几 GB 内存。
+# 一批的 state 变更全部攒在内存里再写盘，BSC 上 max_changes=20_000_000 约占 30G+，
+# 在 32G 上限下会 OOM，重启后再次落后又攒批，形成重启循环；保持 reth 默认值（内存约为其四分之一）。
 [stages.execution]
 max_blocks = 500000
-max_changes = 20000000
-max_cumulative_gas = 6000000000000
+max_changes = 5000000
+max_cumulative_gas = 1500000000000
 max_duration = "10m"
 
 # 落后不超过 rebuild_threshold 块时增量更新状态树，否则清空重建（BSC 全量重建约 6 小时）。
