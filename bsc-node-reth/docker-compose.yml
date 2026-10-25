@@ -17,9 +17,9 @@ services:
       options:
         max-size: "100m"
         max-file: "3"
-    mem_limit: ${MEM_LIMIT:-40g}
-    memswap_limit: ${MEMSWAP_LIMIT:-40g}
-    mem_reservation: ${MEM_RESERVATION:-24g}
+    mem_limit: ${MEM_LIMIT:-48g}
+    memswap_limit: ${MEMSWAP_LIMIT:-48g}
+    mem_reservation: ${MEM_RESERVATION:-32g}
     ulimits:
       nofile:
         soft: 1048576
