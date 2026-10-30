@@ -383,7 +383,7 @@ docker compose down && docker compose up -d
 | `RETH_DEBUG` | `false` | `true` 时提高 RUST_LOG debug，日志更吵 |
 | `RUST_LOG` | `info,reth=info,reth_bsc=info` | 与 `RETH_DEBUG` 配合 |
 | `RETH_LOG_FILE_DIR` | （空） | 非空则容器写文件日志 |
-| `RETH_NODE_EXTRA_ARGS` | （空） | 额外 reth 参数（v0.1.2 勿填已废弃 prefetch 类） |
+| `RETH_NODE_EXTRA_ARGS` | 示例见 `.env.example` | 追加到 `reth-bsc node` 的参数。示例：16GB 跨块缓存（计入 `MEM_LIMIT`）、慢块日志 400ms、落后超过 10000 块才走 pipeline（默认阈值下一轮 pipeline 耗时与同期出块相当，会一直追不上）。v0.1.2 勿填已废弃的 prefetch 类参数 |
 | `PRUNE_STATIC_HISTORY_MONTHS` | `18` | 交易/回执等静态数据保留月数 |
 | `PRUNE_STATE_HISTORY_MONTHS` | `17` | state 历史保留月数 |
 | `BLOCK_TIME_SEC` | `0.45` | 月数换算块数用的出块间隔 |
